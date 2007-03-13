@@ -175,10 +175,6 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
-				RelativePath="..\src\pjlib-util\crc32.c"
-				>
-			</File>
-			<File
 				RelativePath="..\src\pjlib-util\dns.c"
 				>
 				<FileConfiguration
@@ -265,14 +261,6 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\hmac_md5.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\hmac_sha1.c"
-				>
 			</File>
 			<File
 				RelativePath="..\src\pjlib-util\md5.c"
@@ -389,10 +377,6 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjlib-util\sha1.c"
-				>
-			</File>
-			<File
 				RelativePath="..\src\pjlib-util\string.c"
 				>
 				<FileConfiguration
@@ -415,36 +399,48 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjlib-util\stun_auth.c"
+				RelativePath="..\src\pjlib-util\stun.c"
 				>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories=""
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories=""
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjlib-util\stun_endpoint.c"
+				RelativePath="..\src\pjlib-util\stun_client.c"
 				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\stun_msg.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\stun_msg_dump.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\stun_session.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\stun_simple.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\stun_simple_client.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\stun_transaction.c"
-				>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories=""
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories=""
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\src\pjlib-util\symbols.c"
@@ -500,10 +496,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjlib-util\crc32.h"
-				>
-			</File>
-			<File
 				RelativePath="..\include\pjlib-util\dns.h"
 				>
 			</File>
@@ -513,14 +505,6 @@
 			</File>
 			<File
 				RelativePath="..\include\pjlib-util\getopt.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\hmac_md5.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\hmac_sha1.h"
 				>
 			</File>
 			<File
@@ -548,39 +532,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjlib-util\sha1.h"
-				>
-			</File>
-			<File
 				RelativePath="..\include\pjlib-util\string.h"
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjlib-util\stun_auth.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\stun_doc.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\stun_endpoint.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\stun_msg.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\stun_session.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\stun_simple.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\stun_transaction.h"
+				RelativePath="..\include\pjlib-util\stun.h"
 				>
 			</File>
 			<File

@@ -87,10 +87,6 @@ LIB32=link.exe -lib
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\crc32.c"
-# End Source File
-# Begin Source File
-
 SOURCE="..\src\pjlib-util\dns.c"
 # End Source File
 # Begin Source File
@@ -104,14 +100,6 @@ SOURCE="..\src\pjlib-util\errno.c"
 # Begin Source File
 
 SOURCE="..\src\pjlib-util\getopt.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\hmac_md5.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\hmac_sha1.c"
 # End Source File
 # Begin Source File
 
@@ -137,43 +125,15 @@ SOURCE="..\src\pjlib-util\scanner_cis_uint.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\sha1.c"
-# End Source File
-# Begin Source File
-
 SOURCE="..\src\pjlib-util\string.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\stun_auth.c"
+SOURCE="..\src\pjlib-util\stun.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\stun_endpoint.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\stun_msg.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\stun_msg_dump.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\stun_session.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\stun_simple.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\stun_simple_client.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\stun_transaction.c"
+SOURCE="..\src\pjlib-util\stun_client.c"
 # End Source File
 # Begin Source File
 
@@ -193,10 +153,6 @@ SOURCE="..\include\pjlib-util\config.h"
 # End Source File
 # Begin Source File
 
-SOURCE="..\include\pjlib-util\crc32.h"
-# End Source File
-# Begin Source File
-
 SOURCE="..\include\pjlib-util\dns.h"
 # End Source File
 # Begin Source File
@@ -206,14 +162,6 @@ SOURCE="..\include\pjlib-util\errno.h"
 # Begin Source File
 
 SOURCE="..\include\pjlib-util\getopt.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\hmac_md5.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\hmac_sha1.h"
 # End Source File
 # Begin Source File
 
@@ -241,43 +189,11 @@ SOURCE="..\include\pjlib-util\scanner_cis_uint.h"
 # End Source File
 # Begin Source File
 
-SOURCE="..\include\pjlib-util\sha1.h"
-# End Source File
-# Begin Source File
-
 SOURCE="..\include\pjlib-util\string.h"
 # End Source File
 # Begin Source File
 
-SOURCE="..\include\pjlib-util\stun_auth.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\stun_doc.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\stun_endpoint.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\stun_msg.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\stun_session.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\stun_simple.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\stun_transaction.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\turn_client.h"
+SOURCE="..\include\pjlib-util\stun.h"
 # End Source File
 # Begin Source File
 

@@ -207,10 +207,6 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
-				RelativePath="..\src\pjlib-util-test\encryption.c"
-				>
-			</File>
-			<File
 				RelativePath="..\src\pjlib-util-test\main.c"
 				>
 				<FileConfiguration
@@ -231,10 +227,6 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util-test\stun.c"
-				>
 			</File>
 			<File
 				RelativePath="..\src\pjlib-util-test\test.c"
