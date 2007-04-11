@@ -356,13 +356,13 @@ static void mod_inv_on_tsx_state(pjsip_transaction *tsx, pjsip_event *e)
     if (mod_inv.cb.on_tsx_state_changed && inv->notify)
 	(*mod_inv.cb.on_tsx_state_changed)(inv, tsx, e);
 
-    /* Clear invite transaction when tsx is confirmed.
+    /* Clear invite transaction when tsx is confirmed. 
      * Previously we set invite_tsx to NULL only when transaction has
      * terminated, but this didn't work when ACK has the same Via branch
      * value as the INVITE (see http://www.pjsip.org/trac/ticket/113)
      */
     if (tsx->state>=PJSIP_TSX_STATE_CONFIRMED && tsx == inv->invite_tsx)
-        inv->invite_tsx = NULL;
+	inv->invite_tsx = NULL;
 }
 
 

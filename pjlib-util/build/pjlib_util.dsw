@@ -19,6 +19,10 @@ Project: "pjlib_test"="..\..\pjlib\build\pjlib_test.dsp" - Package Owner=<4>
 
 Package=<5>
 {{{
+    begin source code control
+    "$/pjproject/pjlib/build", UIAAAAAA
+    ..\..\pjlib\build
+    end source code control
 }}}
 
 Package=<4>

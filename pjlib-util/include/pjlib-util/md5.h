@@ -29,8 +29,8 @@
 PJ_BEGIN_DECL
 
 /**
- * @defgroup PJLIB_UTIL_MD5 MD5
- * @ingroup PJLIB_UTIL_ENCRYPTION
+ * @defgroup PJLIB_UTIL_MD5 MD5 Functions
+ * @ingroup PJLIB_UTIL
  * @{
  */
 

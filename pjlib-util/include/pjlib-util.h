@@ -1,4 +1,4 @@
-/* $Id$ */
+/* $Id */
 /* 
  * Copyright (C)2003-2007 Benny Prijono <benny@prijono.org>
  *
@@ -24,33 +24,15 @@
  * @brief pjlib-util.h
  */
 
-/* Base */
-#include <pjlib-util/errno.h>
-#include <pjlib-util/types.h>
-
-/* Getopt */
-#include <pjlib-util/getopt.h>
-
-/* Crypto */
-#include <pjlib-util/crc32.h>
-#include <pjlib-util/hmac_md5.h>
-#include <pjlib-util/hmac_sha1.h>
-#include <pjlib-util/md5.h>
-#include <pjlib-util/sha1.h>
-
-/* DNS and resolver */
 #include <pjlib-util/dns.h>
+#include <pjlib-util/errno.h>
+#include <pjlib-util/getopt.h>
+#include <pjlib-util/md5.h>
 #include <pjlib-util/resolver.h>
-#include <pjlib-util/srv_resolver.h>
-
-/* Text scanner */
 #include <pjlib-util/scanner.h>
-
-/* XML */
+#include <pjlib-util/stun.h>
 #include <pjlib-util/xml.h>
 
-/* Old STUN */
-#include <pjlib-util/stun_simple.h>
 
 /**
  * @addtogroup PJLIB_UTIL

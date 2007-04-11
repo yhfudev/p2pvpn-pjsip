@@ -144,7 +144,8 @@ static void usage(void)
     puts  ("                      This option can be specified multiple times.");
     puts  ("  --outbound=url      Set the URL of global outbound proxy server");
     puts  ("                      May be specified multiple times");
-    puts  ("  --stun-srv=name     Set STUN server host or domain");
+    puts  ("  --use-stun1=FORMAT  where FORMAT=host[:port]");
+    puts  ("  --use-stun2=FORMAT  Resolve local IP with the specified STUN servers");
     puts  ("");
     puts  ("TLS Options:");
     puts  ("  --use-tls           Enable TLS transport (default=no)");
@@ -158,7 +159,6 @@ static void usage(void)
 
     puts  ("");
     puts  ("Media Options:");
-    puts  ("  --use-ice           Enable ICE (default:no)");
     puts  ("  --add-codec=name    Manually add codec (default is to enable all)");
     puts  ("  --clock-rate=N      Override sound device clock rate");
     puts  ("  --null-audio        Use NULL audio device");
@@ -325,10 +325,10 @@ static pj_status_t parse_args(int argc, char *argv[],
 	   OPT_LOCAL_PORT, OPT_IP_ADDR, OPT_PROXY, OPT_OUTBOUND_PROXY, 
 	   OPT_REGISTRAR, OPT_REG_TIMEOUT, OPT_PUBLISH, OPT_ID, OPT_CONTACT,
 	   OPT_REALM, OPT_USERNAME, OPT_PASSWORD,
-	   OPT_NAMESERVER, OPT_STUN_DOMAIN, OPT_STUN_SRV,
+	   OPT_NAMESERVER, OPT_USE_STUN1, OPT_USE_STUN2, 
 	   OPT_ADD_BUDDY, OPT_OFFER_X_MS_MSG, OPT_NO_PRESENCE,
 	   OPT_AUTO_ANSWER, OPT_AUTO_HANGUP, OPT_AUTO_PLAY, OPT_AUTO_LOOP,
-	   OPT_AUTO_CONF, OPT_CLOCK_RATE, OPT_USE_ICE,
+	   OPT_AUTO_CONF, OPT_CLOCK_RATE,
 	   OPT_PLAY_FILE, OPT_PLAY_TONE, OPT_RTP_PORT, OPT_ADD_CODEC, 
 	   OPT_ILBC_MODE, OPT_REC_FILE, OPT_AUTO_REC,
 	   OPT_COMPLEXITY, OPT_QUALITY, OPT_PTIME, OPT_NO_VAD,
@@ -366,8 +366,8 @@ static pj_status_t parse_args(int argc, char *argv[],
 	{ "username",	1, 0, OPT_USERNAME},
 	{ "password",	1, 0, OPT_PASSWORD},
 	{ "nameserver", 1, 0, OPT_NAMESERVER},
-	{ "stun-domain",1, 0, OPT_STUN_DOMAIN},
-	{ "stun-srv",   1, 0, OPT_STUN_SRV},
+	{ "use-stun1",  1, 0, OPT_USE_STUN1},
+	{ "use-stun2",  1, 0, OPT_USE_STUN2},
 	{ "add-buddy",  1, 0, OPT_ADD_BUDDY},
 	{ "offer-x-ms-msg",0,0,OPT_OFFER_X_MS_MSG},
 	{ "no-presence", 0, 0, OPT_NO_PRESENCE},
@@ -381,7 +381,6 @@ static pj_status_t parse_args(int argc, char *argv[],
 	{ "play-tone",  1, 0, OPT_PLAY_TONE},
 	{ "rec-file",   1, 0, OPT_REC_FILE},
 	{ "rtp-port",	1, 0, OPT_RTP_PORT},
-	{ "use-ice",    0, 0, OPT_USE_ICE},
 	{ "add-codec",  1, 0, OPT_ADD_CODEC},
 	{ "complexity",	1, 0, OPT_COMPLEXITY},
 	{ "quality",	1, 0, OPT_QUALITY},
@@ -442,6 +441,7 @@ static pj_status_t parse_args(int argc, char *argv[],
      */
     pj_optind = 0;
     while((c=pj_getopt_long(argc,argv, "", long_options,&option_index))!=-1) {
+	char *p;
 	pj_str_t tmp;
 	long lval;
 
@@ -632,12 +632,41 @@ static pj_status_t parse_args(int argc, char *argv[],
 	    }
 	    break;
 
-	case OPT_STUN_DOMAIN:   /* STUN domain */
-	    cfg->cfg.stun_domain = pj_str(pj_optarg);
+	case OPT_USE_STUN1:   /* STUN server 1 */
+	    p = pj_ansi_strchr(pj_optarg, ':');
+	    if (p) {
+		*p = '\0';
+		cfg->udp_cfg.stun_config.stun_srv1 = pj_str(pj_optarg);
+		cfg->udp_cfg.stun_config.stun_port1 = pj_strtoul(pj_cstr(&tmp, p+1));
+		if (cfg->udp_cfg.stun_config.stun_port1 < 1 || cfg->udp_cfg.stun_config.stun_port1 > 65535) {
+		    PJ_LOG(1,(THIS_FILE, 
+			      "Error: expecting port number with "
+			      "option --use-stun1"));
+		    return PJ_EINVAL;
+		}
+	    } else {
+		cfg->udp_cfg.stun_config.stun_port1 = 3478;
+		cfg->udp_cfg.stun_config.stun_srv1 = pj_str(pj_optarg);
+	    }
+	    cfg->udp_cfg.use_stun = PJ_TRUE;
 	    break;
 
-	case OPT_STUN_SRV:   /* STUN server */
-	    cfg->cfg.stun_host = pj_str(pj_optarg);
+	case OPT_USE_STUN2:   /* STUN server 2 */
+	    p = pj_ansi_strchr(pj_optarg, ':');
+	    if (p) {
+		*p = '\0';
+		cfg->udp_cfg.stun_config.stun_srv2 = pj_str(pj_optarg);
+		cfg->udp_cfg.stun_config.stun_port2 = pj_strtoul(pj_cstr(&tmp,p+1));
+		if (cfg->udp_cfg.stun_config.stun_port2 < 1 || cfg->udp_cfg.stun_config.stun_port2 > 65535) {
+		    PJ_LOG(1,(THIS_FILE, 
+			      "Error: expecting port number with "
+			      "option --use-stun2"));
+		    return PJ_EINVAL;
+		}
+	    } else {
+		cfg->udp_cfg.stun_config.stun_port2 = 3478;
+		cfg->udp_cfg.stun_config.stun_srv2 = pj_str(pj_optarg);
+	    }
 	    break;
 
 	case OPT_ADD_BUDDY: /* Add to buddy list. */
@@ -697,10 +726,6 @@ static pj_status_t parse_args(int argc, char *argv[],
 
 	case OPT_REC_FILE:
 	    cfg->rec_file = pj_str(pj_optarg);
-	    break;
-
-	case OPT_USE_ICE:
-	    cfg->media_cfg.enable_ice = PJ_TRUE;
 	    break;
 
 	case OPT_RTP_PORT:
@@ -1088,19 +1113,21 @@ static int write_settings(const struct app_config *config,
     }
 
     /* STUN */
-    if (config->cfg.stun_domain.slen) {
-	pj_ansi_sprintf(line, "--stun-domain %.*s\n",
-			(int)config->cfg.stun_domain.slen, 
-			config->cfg.stun_domain.ptr);
-	pj_strcat2(&cfg, line);
-    }
-    if (config->cfg.stun_host.slen) {
-	pj_ansi_sprintf(line, "--stun-srv %.*s\n",
-			(int)config->cfg.stun_host.slen, 
-			config->cfg.stun_host.ptr);
+    if (config->udp_cfg.stun_config.stun_port1) {
+	pj_ansi_sprintf(line, "--use-stun1 %.*s:%d\n",
+			(int)config->udp_cfg.stun_config.stun_srv1.slen, 
+			config->udp_cfg.stun_config.stun_srv1.ptr, 
+			config->udp_cfg.stun_config.stun_port1);
 	pj_strcat2(&cfg, line);
     }
 
+    if (config->udp_cfg.stun_config.stun_port2) {
+	pj_ansi_sprintf(line, "--use-stun2 %.*s:%d\n",
+			(int)config->udp_cfg.stun_config.stun_srv2.slen, 
+			config->udp_cfg.stun_config.stun_srv2.ptr, 
+			config->udp_cfg.stun_config.stun_port2);
+	pj_strcat2(&cfg, line);
+    }
 
     /* TLS */
     if (config->use_tls)
@@ -1147,8 +1174,6 @@ static int write_settings(const struct app_config *config,
 
 
     /* Media */
-    if (config->media_cfg.enable_ice)
-	pj_strcat2(&cfg, "--use-ice\n");
     if (config->null_audio)
 	pj_strcat2(&cfg, "--null-audio\n");
     if (config->auto_play)
@@ -1317,7 +1342,46 @@ static int write_settings(const struct app_config *config,
  */
 static void app_dump(pj_bool_t detail)
 {
-    pjsua_dump(detail);
+    unsigned old_decor;
+    char buf[1024];
+
+    PJ_LOG(3,(THIS_FILE, "Start dumping application states:"));
+
+    old_decor = pj_log_get_decor();
+    pj_log_set_decor(old_decor & (PJ_LOG_HAS_NEWLINE | PJ_LOG_HAS_CR));
+
+    if (detail)
+	pj_dump_config();
+
+    pjsip_endpt_dump(pjsua_get_pjsip_endpt(), detail);
+    pjmedia_endpt_dump(pjsua_get_pjmedia_endpt());
+    pjsip_tsx_layer_dump(detail);
+    pjsip_ua_dump(detail);
+
+
+    /* Dump all invite sessions: */
+    PJ_LOG(3,(THIS_FILE, "Dumping invite sessions:"));
+
+    if (pjsua_call_get_count() == 0) {
+
+	PJ_LOG(3,(THIS_FILE, "  - no sessions -"));
+
+    } else {
+	unsigned i;
+
+	for (i=0; i<app_config.cfg.max_calls; ++i) {
+	    if (pjsua_call_is_active(i)) {
+		pjsua_call_dump(i, detail, buf, sizeof(buf), "  ");
+		PJ_LOG(3,(THIS_FILE, "%s", buf));
+	    }
+	}
+    }
+
+    /* Dump presence status */
+    pjsua_pres_dump(detail);
+
+    pj_log_set_decor(old_decor);
+    PJ_LOG(3,(THIS_FILE, "Dump complete"));
 }
 
 
@@ -2888,6 +2952,11 @@ pj_status_t app_init(int argc, char *argv[])
     status = parse_args(argc, argv, &app_config, &uri_arg);
     if (status != PJ_SUCCESS)
 	return status;
+
+    /* Copy udp_cfg STUN config to rtp_cfg */
+    app_config.rtp_cfg.use_stun = app_config.udp_cfg.use_stun;
+    app_config.rtp_cfg.stun_config = app_config.udp_cfg.stun_config;
+
 
     /* Initialize application callbacks */
     app_config.cfg.cb.on_call_state = &on_call_state;

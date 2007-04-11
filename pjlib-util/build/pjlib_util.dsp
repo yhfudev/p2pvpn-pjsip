@@ -87,10 +87,6 @@ LIB32=link.exe -lib
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\crc32.c"
-# End Source File
-# Begin Source File
-
 SOURCE="..\src\pjlib-util\dns.c"
 # End Source File
 # Begin Source File
@@ -104,14 +100,6 @@ SOURCE="..\src\pjlib-util\errno.c"
 # Begin Source File
 
 SOURCE="..\src\pjlib-util\getopt.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\hmac_md5.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\hmac_sha1.c"
 # End Source File
 # Begin Source File
 
@@ -137,23 +125,15 @@ SOURCE="..\src\pjlib-util\scanner_cis_uint.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\sha1.c"
-# End Source File
-# Begin Source File
-
-SOURCE="..\src\pjlib-util\srv_resolver.c"
-# End Source File
-# Begin Source File
-
 SOURCE="..\src\pjlib-util\string.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\stun_simple.c"
+SOURCE="..\src\pjlib-util\stun.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjlib-util\stun_simple_client.c"
+SOURCE="..\src\pjlib-util\stun_client.c"
 # End Source File
 # Begin Source File
 
@@ -173,10 +153,6 @@ SOURCE="..\include\pjlib-util\config.h"
 # End Source File
 # Begin Source File
 
-SOURCE="..\include\pjlib-util\crc32.h"
-# End Source File
-# Begin Source File
-
 SOURCE="..\include\pjlib-util\dns.h"
 # End Source File
 # Begin Source File
@@ -186,14 +162,6 @@ SOURCE="..\include\pjlib-util\errno.h"
 # Begin Source File
 
 SOURCE="..\include\pjlib-util\getopt.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\hmac_md5.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\hmac_sha1.h"
 # End Source File
 # Begin Source File
 
@@ -221,19 +189,11 @@ SOURCE="..\include\pjlib-util\scanner_cis_uint.h"
 # End Source File
 # Begin Source File
 
-SOURCE="..\include\pjlib-util\sha1.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjlib-util\srv_resolver.h"
-# End Source File
-# Begin Source File
-
 SOURCE="..\include\pjlib-util\string.h"
 # End Source File
 # Begin Source File
 
-SOURCE="..\include\pjlib-util\stun_simple.h"
+SOURCE="..\include\pjlib-util\stun.h"
 # End Source File
 # Begin Source File
 

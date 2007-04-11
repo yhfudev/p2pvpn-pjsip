@@ -3,8 +3,7 @@
 	ProjectType="Visual C++"
 	Version="8.00"
 	Name="pjmedia"
-	ProjectGUID="{1434FE6C-89C6-4E13-8150-D5A4B1038AAA}"
-	RootNamespace="pjmedia"
+	ProjectGUID="{7FDE3880-A4AB-49E3-B439-EBEF0A0C7A65}"
 	>
 	<Platforms>
 		<Platform
@@ -43,7 +42,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="../include,../../pjlib/include,../../pjlib-util/include,../src/pjmedia/portaudio,../src/pjmedia-codec,../../pjnath/include"
+				AdditionalIncludeDirectories="../include,../../pjlib/include,../../pjlib-util/include,../src/pjmedia/portaudio,../src/pjmedia-codec"
 				PreprocessorDefinitions="NDEBUG;PA_NO_ASIO;WIN32;_LIB;PJ_WIN32=1;PJ_M_I386=1"
 				StringPooling="true"
 				RuntimeLibrary="2"
@@ -119,7 +118,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="../include,../../pjlib/include,../../pjlib-util/include,../src/pjmedia/portaudio,../src/pjmedia-codec,../../pjnath/include"
+				AdditionalIncludeDirectories="../include,../../pjlib/include,../../pjlib-util/include,../src/pjmedia/portaudio,../src/pjmedia-codec"
 				PreprocessorDefinitions="_DEBUG;PA_NO_ASIO;WIN32;_LIB;PJ_WIN32=1;PJ_M_I386=1"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -1018,10 +1017,6 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjmedia\transport_ice.c"
-				>
-			</File>
-			<File
 				RelativePath="..\src\pjmedia\transport_udp.c"
 				>
 				<FileConfiguration
@@ -1266,10 +1261,6 @@
 			</File>
 			<File
 				RelativePath="..\include\pjmedia\transport.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjmedia\transport_ice.h"
 				>
 			</File>
 			<File

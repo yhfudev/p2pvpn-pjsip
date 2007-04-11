@@ -50,12 +50,12 @@
 #define PJLIB_UTIL_ESTUNINMSGTYPE   (PJLIB_UTIL_ERRNO_START+2)	/* 320002 */
 /**
  * @hideinitializer
- * Invalid STUN message length
+ * Invalid STUN message length.
  */
 #define PJLIB_UTIL_ESTUNINMSGLEN    (PJLIB_UTIL_ERRNO_START+3)	/* 320003 */
 /**
  * @hideinitializer
- * Invalid STUN attribute length
+ * STUN attribute length error.
  */
 #define PJLIB_UTIL_ESTUNINATTRLEN   (PJLIB_UTIL_ERRNO_START+4)	/* 320004 */
 /**
@@ -93,16 +93,6 @@
  * Symetric NAT detected by STUN
  */
 #define PJLIB_UTIL_ESTUNSYMMETRIC   (PJLIB_UTIL_ERRNO_START+11)	/* 320011 */
-/**
- * @hideinitializer
- * Invalid STUN magic value
- */
-#define PJLIB_UTIL_ESTUNNOTMAGIC    (PJLIB_UTIL_ERRNO_START+12)	/* 320012 */
-/**
- * @hideinitializer
- * Invalid STUN fingerprint value
- */
-#define PJLIB_UTIL_ESTUNFINGERPRINT (PJLIB_UTIL_ERRNO_START+13)	/* 320013 */
 
 
 
@@ -253,103 +243,6 @@
  * This corresponds to DNS RCODE 10.
  */
 #define PJLIB_UTIL_EDNS_NOTZONE	    PJ_STATUS_FROM_DNS_RCODE(10)/* 320060 */
-
-
-/************************************************************
- * NEW STUN ERROR
- ***********************************************************/
-/* Messaging errors */
-/**
- * @hideinitializer
- * Too many STUN attributes.
- */
-#define PJLIB_UTIL_ESTUNTOOMANYATTR (PJLIB_UTIL_ERRNO_START+110)/* 320110 */
-/**
- * @hideinitializer
- * Unknown STUN attribute. This error happens when the decoder encounters
- * mandatory attribute type which it doesn't understand.
- */
-#define PJLIB_UTIL_ESTUNUNKNOWNATTR (PJLIB_UTIL_ERRNO_START+111)/* 320111 */
-/**
- * @hideinitializer
- * Invalid STUN socket address length.
- */
-#define PJLIB_UTIL_ESTUNINADDRLEN   (PJLIB_UTIL_ERRNO_START+112)/* 320112 */
-/**
- * @hideinitializer
- * STUN IPv6 attribute not supported
- */
-#define PJLIB_UTIL_ESTUNIPV6NOTSUPP (PJLIB_UTIL_ERRNO_START+113)/* 320113 */
-/**
- * @hideinitializer
- * Expecting STUN response message.
- */
-#define PJLIB_UTIL_ESTUNNOTRESPONSE (PJLIB_UTIL_ERRNO_START+114)/* 320114 */
-/**
- * @hideinitializer
- * STUN transaction ID mismatch.
- */
-#define PJLIB_UTIL_ESTUNINVALIDID   (PJLIB_UTIL_ERRNO_START+115)/* 320115 */
-/**
- * @hideinitializer
- * Unable to find handler for the request.
- */
-#define PJLIB_UTIL_ESTUNNOHANDLER   (PJLIB_UTIL_ERRNO_START+116)/* 320116 */
-/**
- * @hideinitializer
- * Found non-FINGERPRINT attribute after MESSAGE-INTEGRITY. This is not
- * valid since MESSAGE-INTEGRITY MUST be the last attribute or the
- * attribute right before FINGERPRINT before the message.
- */
-#define PJLIB_UTIL_ESTUNMSGINTPOS    (PJLIB_UTIL_ERRNO_START+118)/* 320118 */
-/**
- * @hideinitializer
- * Found attribute after FINGERPRINT. This is not valid since FINGERPRINT
- * MUST be the last attribute in the message.
- */
-#define PJLIB_UTIL_ESTUNFINGERPOS   (PJLIB_UTIL_ERRNO_START+119)/* 320119 */
-/**
- * @hideinitializer
- * Missing STUN USERNAME attribute.
- * When credential is included in the STUN message (MESSAGE-INTEGRITY is
- * present), the USERNAME attribute must be present in the message.
- */
-#define PJLIB_UTIL_ESTUNNOUSERNAME  (PJLIB_UTIL_ERRNO_START+120)/* 320120 */
-/**
- * @hideinitializer
- * Unknown STUN username/credential.
- */
-#define PJLIB_UTIL_ESTUNUSERNAME    (PJLIB_UTIL_ERRNO_START+121)/* 320121 */
-/**
- * @hideinitializer
- * Missing/invalidSTUN MESSAGE-INTEGRITY attribute.
- */
-#define PJLIB_UTIL_ESTUNMSGINT	    (PJLIB_UTIL_ERRNO_START+122)/* 320122 */
-/**
- * @hideinitializer
- * Found duplicate STUN attribute.
- */
-#define PJLIB_UTIL_ESTUNDUPATTR	    (PJLIB_UTIL_ERRNO_START+123)/* 320123 */
-/**
- * @hideinitializer
- * Missing STUN REALM attribute.
- */
-#define PJLIB_UTIL_ESTUNNOREALM	    (PJLIB_UTIL_ERRNO_START+124)/* 320124 */
-/**
- * @hideinitializer
- * Missing/stale STUN NONCE attribute value.
- */
-#define PJLIB_UTIL_ESTUNNONCE	    (PJLIB_UTIL_ERRNO_START+125)/* 320125 */
-/**
- * @hideinitializer
- * STUN transaction terminates with failure.
- */
-#define PJLIB_UTIL_ESTUNTSXFAILED    (PJLIB_UTIL_ERRNO_START+126)/* 320126 */
-
-
-//#define PJ_STATUS_FROM_STUN_CODE(code)	(PJLIB_UTIL_ERRNO_START+code)
-
-
 
 
 /**

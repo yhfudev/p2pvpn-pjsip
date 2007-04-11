@@ -49,6 +49,7 @@ typedef struct pjsua_call
     int			 conf_slot; /**< Slot # in conference bridge.	    */
     pjsip_evsub		*xfer_sub;  /**< Xfer server subscription, if this
 					 call was triggered by xfer.	    */
+    pjmedia_sock_info	 skinfo;    /**< Preallocated media sockets.	    */
     pjmedia_transport	*med_tp;    /**< Media transport.		    */
     pj_timer_entry	 refresh_tm;/**< Timer to send re-INVITE.	    */
     pj_timer_entry	 hangup_tm; /**< Timer to hangup call.		    */
@@ -185,12 +186,6 @@ struct pjsua_data
     pj_bool_t		 thread_quit_flag;  /**< Thread quit flag.	*/
     pj_thread_t		*thread[4];	    /**< Array of threads.	*/
 
-    /* STUN and resolver */
-    pj_stun_config	 stun_cfg;  /**< Global STUN settings.		*/
-    pj_sockaddr		 stun_srv;  /**< Resolved STUN server address	*/
-    pj_status_t		 stun_status; /**< STUN server status.		*/
-    pj_dns_resolver	*resolver;  /**< DNS resolver.			*/
-
     /* Account: */
     unsigned		 acc_cnt;	     /**< Number of accounts.	*/
     pjsua_acc_id	 default_acc;	     /**< Default account ID	*/
@@ -275,29 +270,11 @@ PJ_INLINE(pjsua_im_data*) pjsua_im_data_dup(pj_pool_t *pool,
 #endif
 
 
-/**
- * Resolve STUN server.
- */
-pj_status_t pjsua_resolve_stun_server(pj_bool_t wait);
 
 /**
  * Handle incoming invite request.
  */
 pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata);
-
-/*
- * Media channel.
- */
-pj_status_t pjsua_media_channel_init(pjsua_call_id call_id,
-				    pjsip_role_e role);
-pj_status_t pjsua_media_channel_create_sdp(pjsua_call_id call_id, 
-					   pj_pool_t *pool,
-					   pjmedia_sdp_session **p_sdp);
-pj_status_t pjsua_media_channel_update(pjsua_call_id call_id,
-				       const pjmedia_sdp_session *local_sdp,
-				       const pjmedia_sdp_session *remote_sdp);
-pj_status_t pjsua_media_channel_deinit(pjsua_call_id call_id);
-
 
 /**
  * Init presence.
