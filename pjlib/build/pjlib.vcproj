@@ -4,7 +4,6 @@
 	Version="8.00"
 	Name="pjlib"
 	ProjectGUID="{DA0E03ED-53A7-4050-8A85-90541C5509F8}"
-	RootNamespace="pjlib"
 	>
 	<Platforms>
 		<Platform
@@ -536,10 +535,6 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pj\ip_helper_win32.c"
-				>
 			</File>
 			<File
 				RelativePath="..\src\pj\list.c"
@@ -1125,26 +1120,6 @@
 					</FileConfiguration>
 				</File>
 				<File
-					RelativePath="..\src\pj\ip_helper_generic.c"
-					>
-					<FileConfiguration
-						Name="Debug|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-				</File>
-				<File
 					RelativePath="..\src\pj\log_writer_printk.c"
 					>
 					<FileConfiguration
@@ -1480,10 +1455,6 @@
 			</File>
 			<File
 				RelativePath="..\include\pj\ioqueue.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pj\ip_helper.h"
 				>
 			</File>
 			<File

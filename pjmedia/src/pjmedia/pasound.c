@@ -28,8 +28,6 @@
 
 #define THIS_FILE	"pasound.c"
 
-static int snd_init_count;
-
 static struct snd_mgr
 {
     pj_pool_factory *factory;
@@ -84,7 +82,7 @@ static int PaRecorderCallback(const void *input,
 			      PaStreamCallbackFlags statusFlags,
 			      void *userData )
 {
-    pjmedia_snd_stream *stream = (pjmedia_snd_stream*) userData;
+    pjmedia_snd_stream *stream = userData;
     pj_status_t status;
 
     PJ_UNUSED_ARG(output);
@@ -130,7 +128,7 @@ static int PaPlayerCallback( const void *input,
 			     PaStreamCallbackFlags statusFlags,
 			     void *userData )
 {
-    pjmedia_snd_stream *stream = (pjmedia_snd_stream*) userData;
+    pjmedia_snd_stream *stream = userData;
     pj_status_t status;
     unsigned size = frameCount * stream->bytes_per_sample *
 		    stream->channel_count;
@@ -189,42 +187,24 @@ static int PaRecorderPlayerCallback( const void *input,
     return rc;
 }
 
-/* Logging callback from PA */
-static void pa_log_cb(const char *log)
-{
-    PJ_LOG(5,(THIS_FILE, "PA message: %s", log));
-}
-
-/* We should include pa_debugprint.h for this, but the header
- * is not available publicly. :(
- */
-typedef void (*PaUtilLogCallback ) (const char *log);
-void PaUtil_SetDebugPrintFunction(PaUtilLogCallback  cb);
 
 /*
  * Init sound library.
  */
 PJ_DEF(pj_status_t) pjmedia_snd_init(pj_pool_factory *factory)
 {
-    if (++snd_init_count == 1) {
-	int err;
+    int err;
 
-	PaUtil_SetDebugPrintFunction(&pa_log_cb);
+    snd_mgr.factory = factory;
+    err = Pa_Initialize();
 
-	snd_mgr.factory = factory;
-	err = Pa_Initialize();
+    PJ_LOG(4,(THIS_FILE, "PortAudio sound library initialized, status=%d", err));
+    PJ_LOG(4,(THIS_FILE, "PortAudio host api count=%d",
+			 Pa_GetHostApiCount()));
+    PJ_LOG(4,(THIS_FILE, "Sound device count=%d",
+			 pjmedia_snd_get_dev_count()));
 
-	PJ_LOG(4,(THIS_FILE, 
-		  "PortAudio sound library initialized, status=%d", err));
-	PJ_LOG(4,(THIS_FILE, "PortAudio host api count=%d",
-			     Pa_GetHostApiCount()));
-	PJ_LOG(4,(THIS_FILE, "Sound device count=%d",
-			     pjmedia_snd_get_dev_count()));
-
-	return err ? PJMEDIA_ERRNO_FROM_PORTAUDIO(err) : PJ_SUCCESS;
-    } else {
-	return PJ_SUCCESS;
-    }
+    return err ? PJMEDIA_ERRNO_FROM_PORTAUDIO(err) : PJ_SUCCESS;
 }
 
 
@@ -388,7 +368,7 @@ PJ_DEF(pj_status_t) pjmedia_snd_open_rec( int index,
     if (!pool)
 	return PJ_ENOMEM;
 
-    stream = PJ_POOL_ZALLOC_T(pool, pjmedia_snd_stream);
+    stream = pj_pool_zalloc(pool, sizeof(*stream));
     stream->pool = pool;
     pj_strdup2_with_null(pool, &stream->name, paDevInfo->name);
     stream->dir = PJMEDIA_DIR_CAPTURE;
@@ -484,7 +464,7 @@ PJ_DEF(pj_status_t) pjmedia_snd_open_player( int index,
     if (!pool)
 	return PJ_ENOMEM;
 
-    stream = PJ_POOL_ZALLOC_T(pool, pjmedia_snd_stream);
+    stream = pj_pool_calloc(pool, 1, sizeof(*stream));
     stream->pool = pool;
     pj_strdup2_with_null(pool, &stream->name, paDevInfo->name);
     stream->dir = stream->dir = PJMEDIA_DIR_PLAYBACK;
@@ -604,7 +584,7 @@ PJ_DEF(pj_status_t) pjmedia_snd_open( int rec_id,
     if (!pool)
 	return PJ_ENOMEM;
 
-    stream = PJ_POOL_ZALLOC_T(pool, pjmedia_snd_stream);
+    stream = pj_pool_zalloc(pool, sizeof(*stream));
     stream->pool = pool;
     pj_strdup2_with_null(pool, &stream->name, paRecDevInfo->name);
     stream->dir = PJMEDIA_DIR_CAPTURE_PLAYBACK;
@@ -824,17 +804,13 @@ PJ_DEF(pj_status_t) pjmedia_snd_stream_close(pjmedia_snd_stream *stream)
  */
 PJ_DEF(pj_status_t) pjmedia_snd_deinit(void)
 {
-    if (--snd_init_count == 0) {
-	int err;
+    int err;
 
-	PJ_LOG(4,(THIS_FILE, "PortAudio sound library shutting down.."));
+    PJ_LOG(4,(THIS_FILE, "PortAudio sound library shutting down.."));
 
-	err = Pa_Terminate();
+    err = Pa_Terminate();
 
-	return err ? PJMEDIA_ERRNO_FROM_PORTAUDIO(err) : PJ_SUCCESS;
-    } else {
-	return PJ_SUCCESS;
-    }
+    return err ? PJMEDIA_ERRNO_FROM_PORTAUDIO(err) : PJ_SUCCESS;
 }
 
 

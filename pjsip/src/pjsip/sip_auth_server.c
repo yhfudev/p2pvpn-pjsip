@@ -114,7 +114,7 @@ PJ_DEF(pj_status_t) pjsip_auth_srv_verify( pjsip_auth_srv *auth_srv,
 {
     pjsip_authorization_hdr *h_auth;
     pjsip_msg *msg = rdata->msg_info.msg;
-    pjsip_hdr_e htype;
+    int htype;
     pj_str_t acc_name;
     pjsip_cred_info cred_info;
     pj_status_t status;

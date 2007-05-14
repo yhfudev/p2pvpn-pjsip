@@ -70,13 +70,11 @@ const char *my_stristr(const char *whole, const char *part)
 int errno_test(void)
 {
     enum { CUT = 6 };
-    pj_status_t rc = 0;
+    pj_status_t rc;
     char errbuf[256];
 
     PJ_LOG(3,(THIS_FILE, "...errno test: check the msg carefully"));
 
-    PJ_UNUSED_ARG(rc);
-    
     /* 
      * Windows platform error. 
      */
@@ -104,7 +102,7 @@ int errno_test(void)
     /*
      * Unix errors
      */
-#   if defined(EINVAL) && !defined(PJ_SYMBIAN)
+#   ifdef EINVAL
     rc = PJ_STATUS_FROM_OS(EINVAL);
     pj_set_os_error(rc);
 

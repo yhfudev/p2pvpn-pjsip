@@ -17,7 +17,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA 
  */
 
-#include <pjmedia/config.h>
 #include <pjmedia/echo.h>
 #include <pj/assert.h>
 #include <pj/pool.h>
@@ -146,7 +145,7 @@ PJ_DEF(pj_status_t) pjmedia_echo_create( pj_pool_t *pool,
     options |= PJMEDIA_ECHO_SIMPLE;
 #endif
 
-    ec = PJ_POOL_ZALLOC_T(pool, struct pjmedia_echo_state);
+    ec = pj_pool_zalloc(pool, sizeof(struct pjmedia_echo_state));
 
     if (options & PJMEDIA_ECHO_SIMPLE) {
 	ec->op = &echo_supp_op;

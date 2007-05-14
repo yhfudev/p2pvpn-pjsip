@@ -31,14 +31,6 @@
 #  include <pj/compat/cc_msvc.h>
 #elif defined(__GNUC__)
 #  include <pj/compat/cc_gcc.h>
-#elif defined(__CW32__)
-#  include <pj/compat/cc_mwcc.h>
-#elif defined(__MWERKS__)
-#  include <pj/compat/cc_codew.h>
-#elif defined(__GCCE__)
-#  include <pj/compat/cc_gcce.h>
-#elif defined(__ARMCC__)
-#  include <pj/compat/cc_armcc.h>
 #else
 #  error "Unknown compiler."
 #endif
@@ -52,12 +44,6 @@
      * Autoconf
      */
 #   include <pj/compat/os_auto.h>
-
-#elif defined(PJ_SYMBIAN) && PJ_SYMBIAN!=0
-    /*
-     * SymbianOS
-     */
-#  include <pj/compat/os_symbian.h>
 
 #elif defined(PJ_WIN32_WINCE) || defined(_WIN32_WCE) || defined(UNDER_CE)
     /*
@@ -602,14 +588,6 @@
 #   define PJ_TIMESTAMP_USE_RDTSC   0
 #endif
 
-/**
- * Is native platform error positive number?
- * Default: 1 (yes)
- */
-#ifndef PJ_NATIVE_ERR_POSITIVE
-#   define PJ_NATIVE_ERR_POSITIVE   1
-#endif
- 
 /**
  * Include error message string in the library (pj_strerror()).
  * This is very much desirable!

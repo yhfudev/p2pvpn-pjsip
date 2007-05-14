@@ -60,6 +60,8 @@ static void pjsua_call_on_tsx_state_changed(pjsip_inv_session *inv,
 					    pjsip_event *e);
 
 
+/* Destroy the call's media */
+static pj_status_t call_destroy_media(int call_id);
 
 /* Create inactive SDP for call hold. */
 static pj_status_t create_inactive_sdp(pjsua_call *call,
@@ -84,7 +86,7 @@ static void reset_call(pjsua_call_id id)
     call->user_data = NULL;
     call->session = NULL;
     call->xfer_sub = NULL;
-    call->last_code = (pjsip_status_code) 0;
+    call->last_code = 0;
     call->conf_slot = PJSUA_INVALID_ID;
     call->last_text.ptr = call->last_text_buf_;
     call->last_text.slen = 0;
@@ -203,14 +205,14 @@ PJ_DEF(pj_status_t) pjsua_call_make_call( pjsua_acc_id acc_id,
     pjsip_inv_session *inv = NULL;
     pjsua_acc *acc;
     pjsua_call *call;
-    int call_id = -1;
+    unsigned call_id;
     pj_str_t contact;
     pjsip_tx_data *tdata;
     pj_status_t status;
 
 
     /* Check that account is valid */
-    PJ_ASSERT_RETURN(acc_id>=0 || acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc), 
+    PJ_ASSERT_RETURN(acc_id>=0 || acc_id<PJ_ARRAY_SIZE(pjsua_var.acc), 
 		     PJ_EINVAL);
 
     /* Options must be zero for now */
@@ -230,12 +232,12 @@ PJ_DEF(pj_status_t) pjsua_call_make_call( pjsua_acc_id acc_id,
     }
 
     /* Find free call slot. */
-    for (call_id=0; call_id<(int)pjsua_var.ua_cfg.max_calls; ++call_id) {
+    for (call_id=0; call_id<pjsua_var.ua_cfg.max_calls; ++call_id) {
 	if (pjsua_var.calls[call_id].inv == NULL)
 	    break;
     }
 
-    if (call_id == (int)pjsua_var.ua_cfg.max_calls) {
+    if (call_id == pjsua_var.ua_cfg.max_calls) {
 	pjsua_perror(THIS_FILE, "Error making file", PJ_ETOOMANY);
 	PJSUA_UNLOCK();
 	return PJ_ETOOMANY;
@@ -300,15 +302,10 @@ PJ_DEF(pj_status_t) pjsua_call_make_call( pjsua_acc_id acc_id,
 	return status;
     }
 
-    /* Init media channel */
-    status = pjsua_media_channel_init(call->index, PJSIP_ROLE_UAC);
-    if (status != PJ_SUCCESS) {
-	pjsua_perror(THIS_FILE, "Error initializing media channel", status);
-	goto on_error;
-    }
+    /* Get media capability from media endpoint: */
 
-    /* Create SDP offer */
-    status = pjsua_media_channel_create_sdp(call->index, dlg->pool, &offer);
+    status = pjmedia_endpt_create_sdp( pjsua_var.med_endpt, dlg->pool, 1, 
+				       &call->skinfo, &offer);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "pjmedia unable to create SDP", status);
 	goto on_error;
@@ -406,7 +403,6 @@ on_error:
 
     if (call_id != -1) {
 	reset_call(call_id);
-	pjsua_media_channel_deinit(call_id);
     }
 
     PJSUA_UNLOCK();
@@ -507,7 +503,7 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
 	pj_str_t st_text = { "OK", 2 };
 
 	/* Get the replaced call instance */
-	replaced_call = (pjsua_call*) replaced_dlg->mod_data[pjsua_var.mod.id];
+	replaced_call = replaced_dlg->mod_data[pjsua_var.mod.id];
 
 	/* Notify application */
 	pjsua_var.ua_cfg.cb.on_call_replace_request(replaced_call->index,
@@ -530,22 +526,13 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
     }
 
 
-    /* Init media channel */
-    status = pjsua_media_channel_init(call->index, PJSIP_ROLE_UAS);
-    if (status != PJ_SUCCESS) {
-	pjsip_endpt_respond_stateless(pjsua_var.endpt, rdata, 500, NULL,
-				      NULL, NULL);
-	PJSUA_UNLOCK();
-	return PJ_TRUE;
-    }
-
-
     /* Get media capability from media endpoint: */
-    status = pjsua_media_channel_create_sdp(call->index, rdata->tp_info.pool, &answer);
+    status = pjmedia_endpt_create_sdp( pjsua_var.med_endpt, 
+				       rdata->tp_info.pool, 1,
+				       &call->skinfo, &answer );
     if (status != PJ_SUCCESS) {
 	pjsip_endpt_respond_stateless(pjsua_var.endpt, rdata, 500, NULL,
 				      NULL, NULL);
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return PJ_TRUE;
     }
@@ -574,7 +561,6 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
 					  NULL, NULL);
 	}
 
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return PJ_TRUE;
     } 
@@ -594,7 +580,6 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
 	pjsua_perror(THIS_FILE, "Unable to generate Contact header", status);
 	pjsip_endpt_respond_stateless(pjsua_var.endpt, rdata, 500, NULL,
 				      NULL, NULL);
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return PJ_TRUE;
     }
@@ -605,7 +590,6 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
     if (status != PJ_SUCCESS) {
 	pjsip_endpt_respond_stateless(pjsua_var.endpt, rdata, 500, NULL,
 				      NULL, NULL);
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return PJ_TRUE;
     }
@@ -634,7 +618,6 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
 	/* Can't terminate dialog because transaction is in progress.
 	pjsip_dlg_terminate(dlg);
 	 */
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return PJ_TRUE;
     }
@@ -666,15 +649,13 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
 
 	pjsip_dlg_respond(dlg, rdata, 500, NULL, NULL, NULL);
 	pjsip_inv_terminate(inv, 500, PJ_FALSE);
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return PJ_TRUE;
 
     } else {
 	status = pjsip_inv_send_msg(inv, response);
-	if (status != PJ_SUCCESS) {
+	if (status != PJ_SUCCESS)
 	    pjsua_perror(THIS_FILE, "Unable to send 100 response", status);
-	}
     }
 
     ++pjsua_var.call_cnt;
@@ -690,7 +671,7 @@ pj_bool_t pjsua_call_on_incoming(pjsip_rx_data *rdata)
 	replaced_inv = pjsip_dlg_get_inv_session(replaced_dlg);
 
 	/* Get the replaced call instance */
-	replaced_call = (pjsua_call*) replaced_dlg->mod_data[pjsua_var.mod.id];
+	replaced_call = replaced_dlg->mod_data[pjsua_var.mod.id];
 
 	/* Notify application */
 	if (pjsua_var.ua_cfg.cb.on_call_replaced)
@@ -1218,18 +1199,11 @@ PJ_DEF(pj_status_t) pjsua_call_reinvite( pjsua_call_id call_id,
 	return PJSIP_ESESSIONSTATE;
     }
 
-    /* Init media channel */
-    status = pjsua_media_channel_init(call->index, PJSIP_ROLE_UAC);
-    if (status != PJ_SUCCESS) {
-	pjsua_perror(THIS_FILE, "Error initializing media channel", status);
-	pjsip_dlg_dec_lock(dlg);
-	return PJSIP_ESESSIONSTATE;
-    }
-
     /* Create SDP */
     PJ_UNUSED_ARG(unhold);
     PJ_TODO(create_active_inactive_sdp_based_on_unhold_arg);
-    status = pjsua_media_channel_create_sdp(call->index, call->inv->pool, &sdp);
+    status = pjmedia_endpt_create_sdp( pjsua_var.med_endpt, call->inv->pool, 
+				       1, &call->skinfo, &sdp);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "Unable to get SDP from media endpoint", 
 		     status);
@@ -1377,13 +1351,13 @@ PJ_DEF(pj_status_t) pjsua_call_xfer_replaces( pjsua_call_id call_id,
 		      dest_dlg->call_id->id.slen +
 		      dest_dlg->remote.info->tag.slen +
 		      dest_dlg->local.info->tag.slen + 32 
-		      < (long)sizeof(str_dest_buf), PJSIP_EURITOOLONG);
+		      < sizeof(str_dest_buf), PJSIP_EURITOOLONG);
 
     /* Print URI */
     str_dest_buf[0] = '<';
     str_dest.slen = 1;
 
-    uri = (pjsip_uri*) pjsip_uri_get_uri(dest_dlg->remote.info->uri);
+    uri = pjsip_uri_get_uri(dest_dlg->remote.info->uri);
     len = pjsip_uri_print(PJSIP_URI_IN_REQ_URI, uri, 
 		          str_dest_buf+1, sizeof(str_dest_buf)-1);
     if (len < 0)
@@ -1509,7 +1483,7 @@ PJ_DEF(pj_status_t) pjsua_call_send_im( pjsua_call_id call_id,
     pjsua_process_msg_data( tdata, msg_data);
 
     /* Create IM data and attach to the request. */
-    im_data = PJ_POOL_ZALLOC_T(tdata->pool, pjsua_im_data);
+    im_data = pj_pool_zalloc(tdata->pool, sizeof(*im_data));
     im_data->acc_id = call->acc_id;
     im_data->call_id = call_id;
     im_data->to = call->inv->dlg->remote.info_str;
@@ -1632,7 +1606,7 @@ static void dump_media_session(const char *indent,
 	int rem_port;
 	const char *dir;
 	char last_update[64];
-	char packets[32], bytes[32], ipbytes[32], avg_bps[32], avg_ipbps[32];
+	char packets[32], bytes[32], ipbytes[32], avg_bps[32];
 	pj_time_val media_duration, now;
 
 	pjmedia_session_get_stream_stat(session, i, &stat);
@@ -1685,7 +1659,7 @@ static void dump_media_session(const char *indent,
 
 	len = pj_ansi_snprintf(p, end-p,
 	       "%s     RX pt=%d, stat last update: %s\n"
-	       "%s        total %spkt %sB (%sB +IP hdr) @avg=%sbps/%sbps\n"
+	       "%s        total %spkt %sB (%sB +IP hdr) @avg=%sbps\n"
 	       "%s        pkt loss=%d (%3.1f%%), dup=%d (%3.1f%%), reorder=%d (%3.1f%%)\n"
 	       "%s              (msec)    min     avg     max     last\n"
 	       "%s        loss period: %7.3f %7.3f %7.3f %7.3f\n"
@@ -1695,9 +1669,8 @@ static void dump_media_session(const char *indent,
 	       indent,
 	       good_number(packets, stat.rx.pkt),
 	       good_number(bytes, stat.rx.bytes),
-	       good_number(ipbytes, stat.rx.bytes + stat.rx.pkt * 40),
+	       good_number(ipbytes, stat.rx.bytes + stat.rx.pkt * 32),
 	       good_number(avg_bps, stat.rx.bytes * 8 * 1000 / PJ_TIME_VAL_MSEC(media_duration)),
-	       good_number(avg_ipbps, (stat.rx.bytes + stat.rx.pkt * 40) * 8 * 1000 / PJ_TIME_VAL_MSEC(media_duration)),
 	       indent,
 	       stat.rx.loss,
 	       stat.rx.loss * 100.0 / (stat.rx.pkt + stat.rx.loss),
@@ -1741,7 +1714,7 @@ static void dump_media_session(const char *indent,
 
 	len = pj_ansi_snprintf(p, end-p,
 	       "%s     TX pt=%d, ptime=%dms, stat last update: %s\n"
-	       "%s        total %spkt %sB (%sB +IP hdr) @avg %sbps/%sbps\n"
+	       "%s        total %spkt %sB (%sB +IP hdr) @avg %sbps\n"
 	       "%s        pkt loss=%d (%3.1f%%), dup=%d (%3.1f%%), reorder=%d (%3.1f%%)\n"
 	       "%s              (msec)    min     avg     max     last\n"
 	       "%s        loss period: %7.3f %7.3f %7.3f %7.3f\n"
@@ -1755,9 +1728,8 @@ static void dump_media_session(const char *indent,
 	       indent,
 	       good_number(packets, stat.tx.pkt),
 	       good_number(bytes, stat.tx.bytes),
-	       good_number(ipbytes, stat.tx.bytes + stat.tx.pkt * 40),
+	       good_number(ipbytes, stat.tx.bytes + stat.tx.pkt * 32),
 	       good_number(avg_bps, stat.tx.bytes * 8 * 1000 / PJ_TIME_VAL_MSEC(media_duration)),
-	       good_number(avg_ipbps, (stat.tx.bytes + stat.tx.pkt * 40) * 8 * 1000 / PJ_TIME_VAL_MSEC(media_duration)),
 
 	       indent,
 	       stat.tx.loss,
@@ -1924,6 +1896,34 @@ PJ_DEF(pj_status_t) pjsua_call_dump( pjsua_call_id call_id,
 
 
 /*
+ * Destroy the call's media
+ */
+static pj_status_t call_destroy_media(int call_id)
+{
+    pjsua_call *call = &pjsua_var.calls[call_id];
+
+    if (call->conf_slot != PJSUA_INVALID_ID) {
+	pjmedia_conf_remove_port(pjsua_var.mconf, call->conf_slot);
+	call->conf_slot = PJSUA_INVALID_ID;
+    }
+
+    if (call->session) {
+	/* Destroy session (this will also close RTP/RTCP sockets). */
+	pjmedia_session_destroy(call->session);
+	call->session = NULL;
+
+	PJ_LOG(4,(THIS_FILE, "Media session for call %d is destroyed", 
+			     call_id));
+
+    }
+
+    call->media_st = PJSUA_CALL_MEDIA_NONE;
+
+    return PJ_SUCCESS;
+}
+
+
+/*
  * This callback receives notification from invite session when the
  * session state has changed.
  */
@@ -1934,7 +1934,7 @@ static void pjsua_call_on_state_changed(pjsip_inv_session *inv,
 
     PJSUA_LOCK();
 
-    call = (pjsua_call*) inv->dlg->mod_data[pjsua_var.mod.id];
+    call = inv->dlg->mod_data[pjsua_var.mod.id];
 
     if (!call) {
 	PJSUA_UNLOCK();
@@ -1948,8 +1948,7 @@ static void pjsua_call_on_state_changed(pjsip_inv_session *inv,
 	case PJSIP_INV_STATE_CONNECTING:
 	    if (call->res_time.sec == 0)
 		pj_gettimeofday(&call->res_time);
-	    call->last_code = (pjsip_status_code) 
-	    		      e->body.tsx_state.tsx->status_code;
+	    call->last_code = e->body.tsx_state.tsx->status_code;
 	    pj_strncpy(&call->last_text, 
 		       &e->body.tsx_state.tsx->status_text,
 		       sizeof(call->last_text_buf_));
@@ -1962,16 +1961,14 @@ static void pjsua_call_on_state_changed(pjsip_inv_session *inv,
 	    if (call->res_time.sec == 0)
 		pj_gettimeofday(&call->res_time);
 	    if (e->body.tsx_state.tsx->status_code > call->last_code) {
-		call->last_code = (pjsip_status_code) 
-				  e->body.tsx_state.tsx->status_code;
+		call->last_code = e->body.tsx_state.tsx->status_code;
 		pj_strncpy(&call->last_text, 
 			   &e->body.tsx_state.tsx->status_text,
 			   sizeof(call->last_text_buf_));
 	    }
 	    break;
 	default:
-	    call->last_code = (pjsip_status_code) 
-	    		      e->body.tsx_state.tsx->status_code;
+	    call->last_code = e->body.tsx_state.tsx->status_code;
 	    pj_strncpy(&call->last_text, 
 		       &e->body.tsx_state.tsx->status_text,
 		       sizeof(call->last_text_buf_));
@@ -2048,7 +2045,7 @@ static void pjsua_call_on_state_changed(pjsip_inv_session *inv,
 	pj_assert(call != NULL);
 
 	if (call)
-	    pjsua_media_channel_deinit(call->index);
+	    call_destroy_media(call->index);
 
 	/* Free call */
 	call->inv = NULL;
@@ -2091,6 +2088,22 @@ static void call_disconnect( pjsip_inv_session *inv,
 }
 
 /*
+ * DTMF callback from the stream.
+ */
+static void dtmf_callback(pjmedia_stream *strm, void *user_data,
+			  int digit)
+{
+    PJ_UNUSED_ARG(strm);
+
+    if (pjsua_var.ua_cfg.cb.on_dtmf_digit) {
+	pjsua_call_id call_id;
+
+	call_id = (pjsua_call_id)user_data;
+	pjsua_var.ua_cfg.cb.on_dtmf_digit(call_id, digit);
+    }
+}
+
+/*
  * Callback to be called when SDP offer/answer negotiation has just completed
  * in the session. This function will start/update media if negotiation
  * has succeeded.
@@ -2098,20 +2111,25 @@ static void call_disconnect( pjsip_inv_session *inv,
 static void pjsua_call_on_media_update(pjsip_inv_session *inv,
 				       pj_status_t status)
 {
+    int prev_media_st = 0;
     pjsua_call *call;
+    pjmedia_session_info sess_info;
     const pjmedia_sdp_session *local_sdp;
     const pjmedia_sdp_session *remote_sdp;
+    pjmedia_port *media_port;
+    pj_str_t port_name;
+    char tmp[PJSIP_MAX_URL_SIZE];
 
     PJSUA_LOCK();
 
-    call = (pjsua_call*) inv->dlg->mod_data[pjsua_var.mod.id];
+    call = inv->dlg->mod_data[pjsua_var.mod.id];
 
     if (status != PJ_SUCCESS) {
 
 	pjsua_perror(THIS_FILE, "SDP negotiation has failed", status);
 
 	/* Stop/destroy media, if any */
-	pjsua_media_channel_deinit(call->index);
+	call_destroy_media(call->index);
 
 	/* Disconnect call if we're not in the middle of initializing an
 	 * UAS dialog and if this is not a re-INVITE 
@@ -2126,8 +2144,15 @@ static void pjsua_call_on_media_update(pjsip_inv_session *inv,
 	return;
     }
 
+    /* Destroy existing media session, if any. */
+
+    if (call) {
+	prev_media_st = call->media_st;
+	call_destroy_media(call->index);
+    }
 
     /* Get local and remote SDP */
+
     status = pjmedia_sdp_neg_get_active_local(call->inv->neg, &local_sdp);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, 
@@ -2149,16 +2174,155 @@ static void pjsua_call_on_media_update(pjsip_inv_session *inv,
 	return;
     }
 
-    status = pjsua_media_channel_update(call->index, local_sdp, remote_sdp);
+    /* Create media session info based on SDP parameters. 
+     * We only support one stream per session at the moment
+     */    
+    status = pjmedia_session_info_from_sdp( call->inv->dlg->pool, 
+					    pjsua_var.med_endpt, 
+					    1,&sess_info, 
+					    local_sdp, remote_sdp);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "Unable to create media session", 
 		     status);
 	call_disconnect(inv, PJSIP_SC_UNSUPPORTED_MEDIA_TYPE);
-	pjsua_media_channel_deinit(call->index);
 	PJSUA_UNLOCK();
 	return;
     }
 
+    /* Check if media is put on-hold */
+    if (sess_info.stream_cnt == 0 || 
+	sess_info.stream_info[0].dir == PJMEDIA_DIR_NONE)
+    {
+
+	/* Determine who puts the call on-hold */
+	if (prev_media_st == PJSUA_CALL_MEDIA_ACTIVE) {
+	    if (pjmedia_sdp_neg_was_answer_remote(call->inv->neg)) {
+		/* It was local who offer hold */
+		call->media_st = PJSUA_CALL_MEDIA_LOCAL_HOLD;
+	    } else {
+		call->media_st = PJSUA_CALL_MEDIA_REMOTE_HOLD;
+	    }
+	}
+
+	call->media_dir = PJMEDIA_DIR_NONE;
+
+    } else {
+
+	/* Override ptime, if this option is specified. */
+	if (pjsua_var.media_cfg.ptime != 0) {
+	    sess_info.stream_info[0].param->setting.frm_per_pkt = (pj_uint8_t)
+		(pjsua_var.media_cfg.ptime / sess_info.stream_info[0].param->info.frm_ptime);
+	    if (sess_info.stream_info[0].param->setting.frm_per_pkt == 0)
+		sess_info.stream_info[0].param->setting.frm_per_pkt = 1;
+	}
+
+	/* Disable VAD, if this option is specified. */
+	if (pjsua_var.media_cfg.no_vad) {
+	    sess_info.stream_info[0].param->setting.vad = 0;
+	}
+
+
+	/* Optionally, application may modify other stream settings here
+	 * (such as jitter buffer parameters, codec ptime, etc.)
+	 */
+	sess_info.stream_info[0].jb_init = pjsua_var.media_cfg.jb_init;
+	sess_info.stream_info[0].jb_min_pre = pjsua_var.media_cfg.jb_min_pre;
+	sess_info.stream_info[0].jb_max_pre = pjsua_var.media_cfg.jb_max_pre;
+	sess_info.stream_info[0].jb_max = pjsua_var.media_cfg.jb_max;
+
+	/* Create session based on session info. */
+	status = pjmedia_session_create( pjsua_var.med_endpt, &sess_info,
+					 &call->med_tp,
+					 call, &call->session );
+	if (status != PJ_SUCCESS) {
+	    pjsua_perror(THIS_FILE, "Unable to create media session", 
+			 status);
+	    //call_disconnect(inv, PJSIP_SC_UNSUPPORTED_MEDIA_TYPE);
+	    PJSUA_UNLOCK();
+	    return;
+	}
+
+	/* If DTMF callback is installed by application, install our
+	 * callback to the session.
+	 */
+	if (pjsua_var.ua_cfg.cb.on_dtmf_digit) {
+	    pjmedia_session_set_dtmf_callback(call->session, 0, 
+					      &dtmf_callback, 
+					      (void*)(call->index));
+	}
+
+	/* Get the port interface of the first stream in the session.
+	 * We need the port interface to add to the conference bridge.
+	 */
+	pjmedia_session_get_port(call->session, 0, &media_port);
+
+
+	/*
+	 * Add the call to conference bridge.
+	 */
+	port_name.ptr = tmp;
+	port_name.slen = pjsip_uri_print(PJSIP_URI_IN_REQ_URI,
+					 call->inv->dlg->remote.info->uri,
+					 tmp, sizeof(tmp));
+	if (port_name.slen < 1) {
+	    port_name = pj_str("call");
+	}
+	status = pjmedia_conf_add_port( pjsua_var.mconf, call->inv->pool,
+					media_port, 
+					&port_name,
+					(unsigned*)&call->conf_slot);
+	if (status != PJ_SUCCESS) {
+	    pjsua_perror(THIS_FILE, "Unable to create conference slot", 
+			 status);
+	    call_destroy_media(call->index);
+	    //call_disconnect(inv, PJSIP_SC_INTERNAL_SERVER_ERROR);
+	    PJSUA_UNLOCK();
+	    return;
+	}
+
+	/* Call's media state is active */
+	call->media_st = PJSUA_CALL_MEDIA_ACTIVE;
+	call->media_dir = sess_info.stream_info[0].dir;
+    }
+
+    /* Print info. */
+    {
+	char info[80];
+	int info_len = 0;
+	unsigned i;
+
+	for (i=0; i<sess_info.stream_cnt; ++i) {
+	    int len;
+	    const char *dir;
+	    pjmedia_stream_info *strm_info = &sess_info.stream_info[i];
+
+	    switch (strm_info->dir) {
+	    case PJMEDIA_DIR_NONE:
+		dir = "inactive";
+		break;
+	    case PJMEDIA_DIR_ENCODING:
+		dir = "sendonly";
+		break;
+	    case PJMEDIA_DIR_DECODING:
+		dir = "recvonly";
+		break;
+	    case PJMEDIA_DIR_ENCODING_DECODING:
+		dir = "sendrecv";
+		break;
+	    default:
+		dir = "unknown";
+		break;
+	    }
+	    len = pj_ansi_sprintf( info+info_len,
+				   ", stream #%d: %.*s (%s)", i,
+				   (int)strm_info->fmt.encoding_name.slen,
+				   strm_info->fmt.encoding_name.ptr,
+				   dir);
+	    if (len > 0)
+		info_len += len;
+	}
+	PJ_LOG(4,(THIS_FILE,"Media updates%s", info));
+    }
 
     /* Call application callback, if any */
     if (pjsua_var.ua_cfg.cb.on_call_media_state)
@@ -2178,15 +2342,11 @@ static pj_status_t create_inactive_sdp(pjsua_call *call,
     pj_status_t status;
     pjmedia_sdp_conn *conn;
     pjmedia_sdp_attr *attr;
-    pjmedia_sock_info skinfo;
     pjmedia_sdp_session *sdp;
-
-    /* Get media socket info */
-    pjmedia_transport_get_info(call->med_tp, &skinfo);
 
     /* Create new offer */
     status = pjmedia_endpt_create_sdp(pjsua_var.med_endpt, pjsua_var.pool, 1,
-				      &skinfo, &sdp);
+				      &call->skinfo, &sdp);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "Unable to create local SDP", status);
 	return status;
@@ -2231,7 +2391,7 @@ static void pjsua_call_on_rx_offer(pjsip_inv_session *inv,
 
     PJSUA_LOCK();
 
-    call = (pjsua_call*) inv->dlg->mod_data[pjsua_var.mod.id];
+    call = inv->dlg->mod_data[pjsua_var.mod.id];
 
     /*
      * See if remote is offering active media (i.e. not on-hold)
@@ -2262,19 +2422,11 @@ static void pjsua_call_on_rx_offer(pjsip_inv_session *inv,
 		  "(media in offer is %s)", call->index, remote_state));
 	status = create_inactive_sdp( call, &answer );
     } else {
-
 	PJ_LOG(4,(THIS_FILE, "Call %d: received updated media offer",
 		  call->index));
-
-	/* Init media channel */
-	status = pjsua_media_channel_init(call->index, PJSIP_ROLE_UAC);
-	if (status != PJ_SUCCESS) {
-	    pjsua_perror(THIS_FILE, "Error initializing media channel", status);
-	    PJSUA_UNLOCK();
-	    return;
-	}
-
-	status = pjsua_media_channel_create_sdp(call->index, call->inv->pool, &answer);
+	status = pjmedia_endpt_create_sdp( pjsua_var.med_endpt, 
+					   call->inv->pool, 1,
+					   &call->skinfo, &answer);	
     }
 
     if (status != PJ_SUCCESS) {
@@ -2314,7 +2466,7 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	const pj_str_t REFER_SUB = { "Refer-Sub", 9 };
 	pjsua_call *call;
 
-	call = (pjsua_call*) pjsip_evsub_get_mod_data(sub, pjsua_var.mod.id);
+	call = pjsip_evsub_get_mod_data(sub, pjsua_var.mod.id);
 
 	/* Must be receipt of response message */
 	pj_assert(event->type == PJSIP_EVENT_TSX_STATE && 
@@ -2377,7 +2529,7 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	pj_bool_t cont;
 	pj_status_t status;
 
-	call = (pjsua_call*) pjsip_evsub_get_mod_data(sub, pjsua_var.mod.id);
+	call = pjsip_evsub_get_mod_data(sub, pjsua_var.mod.id);
 
 	/* When subscription is terminated, clear the xfer_sub member of 
 	 * the inv_data.
@@ -2421,7 +2573,7 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	    }
 
 	    /* Try to parse the content */
-	    status = pjsip_parse_status_line((char*)body->data, body->len, 
+	    status = pjsip_parse_status_line(body->data, body->len, 
 					     &status_line);
 	    if (status != PJ_SUCCESS) {
 		PJ_LOG(4,(THIS_FILE, 
@@ -2466,7 +2618,7 @@ static void xfer_server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
     if (pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
 	pjsua_call *call;
 
-	call = (pjsua_call*) pjsip_evsub_get_mod_data(sub, pjsua_var.mod.id);
+	call = pjsip_evsub_get_mod_data(sub, pjsua_var.mod.id);
 	if (!call)
 	    return;
 
@@ -2501,7 +2653,7 @@ static void on_call_transfered( pjsip_inv_session *inv,
     pjsip_status_code code;
     pjsip_evsub *sub;
 
-    existing_call = (pjsua_call*) inv->dlg->mod_data[pjsua_var.mod.id];
+    existing_call = inv->dlg->mod_data[pjsua_var.mod.id];
 
     /* Find the Refer-To header */
     refer_to = (pjsip_generic_string_hdr*)
@@ -2528,8 +2680,7 @@ static void on_call_transfered( pjsip_inv_session *inv,
     /* Find optional Referred-By header (to be copied onto outgoing INVITE
      * request.
      */
-    ref_by_hdr = (pjsip_hdr*)
-		 pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &str_ref_by, 
+    ref_by_hdr = pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &str_ref_by, 
 					    NULL);
 
     /* Notify callback */
@@ -2540,7 +2691,7 @@ static void on_call_transfered( pjsip_inv_session *inv,
 							&code);
 
     if (code < 200)
-	code = PJSIP_SC_OK;
+	code = 200;
     if (code >= 300) {
 	/* Application rejects call transfer request */
 	pjsip_dlg_respond( inv->dlg, rdata, code, NULL, NULL, NULL);
@@ -2656,8 +2807,7 @@ static void on_call_transfered( pjsip_inv_session *inv,
      * to the outgoing INVITE request.
      */
     if (ref_by_hdr != NULL) {
-	pjsip_hdr *dup = (pjsip_hdr*)
-			 pjsip_hdr_clone(rdata->tp_info.pool, ref_by_hdr);
+	pjsip_hdr *dup = pjsip_hdr_clone(rdata->tp_info.pool, ref_by_hdr);
 	pj_list_push_back(&msg_data.hdr_list, dup);
     }
 
@@ -2712,7 +2862,7 @@ static void pjsua_call_on_tsx_state_changed(pjsip_inv_session *inv,
 					    pjsip_transaction *tsx,
 					    pjsip_event *e)
 {
-    pjsua_call *call = (pjsua_call*) inv->dlg->mod_data[pjsua_var.mod.id];
+    pjsua_call *call = inv->dlg->mod_data[pjsua_var.mod.id];
 
     PJSUA_LOCK();
 
@@ -2774,7 +2924,7 @@ static void pjsua_call_on_tsx_state_changed(pjsip_inv_session *inv,
 	if (tsx->status_code >= 200) {
 	    pjsua_im_data *im_data;
 
-	    im_data = (pjsua_im_data*) tsx->mod_data[pjsua_var.mod.id];
+	    im_data = tsx->mod_data[pjsua_var.mod.id];
 	    /* im_data can be NULL if this is typing indication */
 
 	    if (im_data && pjsua_var.ua_cfg.cb.on_pager_status) {
@@ -2782,8 +2932,7 @@ static void pjsua_call_on_tsx_state_changed(pjsip_inv_session *inv,
 						    &im_data->to,
 						    &im_data->body,
 						    im_data->user_data,
-						    (pjsip_status_code)
-						    	tsx->status_code,
+						    tsx->status_code,
 						    &tsx->status_text);
 	    }
 	}

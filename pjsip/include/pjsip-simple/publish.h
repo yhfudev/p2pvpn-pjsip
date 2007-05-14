@@ -32,13 +32,13 @@ PJ_BEGIN_DECL
 
 
 /**
- @defgroup PJSIP_SIMPLE_PUBLISH SIP Event State Publication (PUBLISH, RFC 3903)
+ @defgroup PJSIP_SIMPLE_PUBLISH SIP Event State Publication (PUBLISH, RFC 3856)
  @ingroup PJSIP_SIMPLE
- @brief Support for SIP Event State Publication (PUBLISH, RFC 3903)
+ @brief Support for SIP Event State Publication (PUBLISH, RFC 3856)
  @{
 
  This module contains the implementation of Session Initiation Protocol (SIP)
- Extension for Event State Publication (PUBLISH) as defined by RFC 3903.
+ Extension for Event State Publication (PUBLISH) as defined by RFC 3856.
  */
 
 /**

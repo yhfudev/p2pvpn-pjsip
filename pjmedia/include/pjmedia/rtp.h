@@ -77,8 +77,7 @@ PJ_BEGIN_DECL
 
 
 /**
- * RTP packet header. Note that all RTP functions here will work with this
- * header in network byte order.
+ * RTP packet header.
  */
 #pragma pack(1)
 struct pjmedia_rtp_hdr
@@ -230,7 +229,7 @@ typedef struct pjmedia_rtp_status pjmedia_rtp_status;
  *
  * @param ses		The session.
  * @param default_pt	Default payload type.
- * @param sender_ssrc	SSRC used for outgoing packets, in host byte order.
+ * @param sender_ssrc	SSRC used for outgoing packets.
  *
  * @return		PJ_SUCCESS if successfull.
  */
@@ -263,16 +262,11 @@ PJ_DECL(pj_status_t) pjmedia_rtp_encode_rtp( pjmedia_rtp_session *ses,
  * The decode function is guaranteed to point the payload to the correct 
  * position regardless of any options present in the RTP packet.
  *
- * Note that this function does not modify the returned RTP header to
- * host byte order.
- *
  * @param ses		The session.
  * @param pkt		The received RTP packet.
  * @param pkt_len	The length of the packet.
- * @param hdr		Upon return will point to the location of the RTP 
- *			header inside the packet. Note that the RTP header
- *			will be given back as is, meaning that the fields
- *			will be in network byte order.
+ * @param hdr		Upon return will point to the location of the RTP header
+ *			inside the packet.
  * @param payload	Upon return will point to the location of the
  *			payload inside the packet.
  * @param payloadlen	Upon return will indicate the size of the payload.
@@ -291,8 +285,7 @@ PJ_DECL(pj_status_t) pjmedia_rtp_decode_rtp( pjmedia_rtp_session *ses,
  * calculations.
  *
  * @param ses	    The session.
- * @param hdr	    The RTP header of the incoming packet. The header must
- *		    be given with fields in network byte order.
+ * @param hdr	    The RTP header of the incoming packet.
  * @param seq_st    Optional structure to receive the status of the RTP packet
  *		    processing.
  */

@@ -302,7 +302,6 @@ PJ_DECL(pj_status_t) pj_init(void);
  */
 PJ_DECL(void) pj_shutdown(void);
 
-typedef void (*pj_exit_callback)(void);
 /**
  * Register cleanup function to be called by PJLIB when pj_shutdown() is 
  * called.
@@ -311,7 +310,7 @@ typedef void (*pj_exit_callback)(void);
  *
  * @return PJ_SUCCESS on success.
  */
-PJ_DECL(pj_status_t) pj_atexit(pj_exit_callback func);
+PJ_DECL(pj_status_t) pj_atexit(void (*func)(void));
 
 
 

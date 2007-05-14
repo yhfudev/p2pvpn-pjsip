@@ -16,7 +16,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA 
  */
-#include <pjsip/sip_transport_udp.h>
+#include <pjsip/sip_transport.h>
 #include <pjsip/sip_endpoint.h>
 #include <pjsip/sip_errno.h>
 #include <pj/addr_resolv.h>
@@ -82,7 +82,7 @@ static void init_rdata(struct udp_transport *tp, unsigned rdata_index,
     //note: already done by caller
     //pj_pool_reset(pool);
 
-    rdata = PJ_POOL_ZALLOC_T(pool, pjsip_rx_data);
+    rdata = pj_pool_zalloc(pool, sizeof(pjsip_rx_data));
 
     /* Init tp_info part. */
     rdata->tp_info.pool = pool;
@@ -129,13 +129,10 @@ static void udp_on_read_complete( pj_ioqueue_key_t *key,
      * complete asynchronously, to allow other sockets to get their data.
      */
     for (i=0;; ++i) {
-    	enum { MIN_SIZE = 32 };
 	pj_uint32_t flags;
 
-	/* Report the packet to transport manager. Only do so if packet size
-	 * is relatively big enough for a SIP packet.
-	 */
-	if (bytes_read > MIN_SIZE) {
+	/* Report the packet to transport manager. */
+	if (bytes_read > 0) {
 	    pj_size_t size_eaten;
 	    const pj_sockaddr_in *src_addr = 
 		(pj_sockaddr_in*)&rdata->pkt_info.src_addr;
@@ -160,7 +157,7 @@ static void udp_on_read_complete( pj_ioqueue_key_t *key,
 	    /* Since this is UDP, the whole buffer is the message. */
 	    rdata->pkt_info.len = 0;
 
-	} else if (bytes_read <= MIN_SIZE) {
+	} else if (bytes_read == 0) {
 
 	    /* TODO: */
 
@@ -264,8 +261,7 @@ static void udp_on_write_complete( pj_ioqueue_key_t *key,
 				   pj_ioqueue_op_key_t *op_key,
 				   pj_ssize_t bytes_sent)
 {
-    struct udp_transport *tp = (struct udp_transport*) 
-    			       pj_ioqueue_get_user_data(key);
+    struct udp_transport *tp = pj_ioqueue_get_user_data(key);
     pjsip_tx_data_op_key *tdata_op_key = (pjsip_tx_data_op_key*)op_key;
 
     tdata_op_key->tdata = NULL;
@@ -286,7 +282,9 @@ static pj_status_t udp_send_msg( pjsip_transport *transport,
 				 const pj_sockaddr_t *rem_addr,
 				 int addr_len,
 				 void *token,
-				 pjsip_transport_callback callback)
+				 void (*callback)(pjsip_transport*,
+						  void *token,
+						  pj_ssize_t))
 {
     struct udp_transport *tp = (struct udp_transport*)transport;
     pj_ssize_t size;
@@ -448,7 +446,7 @@ PJ_DEF(pj_status_t) pjsip_udp_transport_attach( pjsip_endpoint *endpt,
 	return PJ_ENOMEM;
 
     /* Create the UDP transport object. */
-    tp = PJ_POOL_ZALLOC_T(pool, struct udp_transport);
+    tp = pj_pool_zalloc(pool, sizeof(struct udp_transport));
 
     /* Save pool. */
     tp->base.pool = pool;
@@ -471,7 +469,7 @@ PJ_DEF(pj_status_t) pjsip_udp_transport_attach( pjsip_endpoint *endpt,
     tp->base.key.type = PJSIP_TRANSPORT_UDP;
 
     /* Remote address is left zero (except the family) */
-    tp->base.key.rem_addr.addr.sa_family = PJ_AF_INET;
+    tp->base.key.rem_addr.sa_family = PJ_AF_INET;
 
     /* Type name. */
     tp->base.type_name = "UDP";
@@ -498,7 +496,7 @@ PJ_DEF(pj_status_t) pjsip_udp_transport_attach( pjsip_endpoint *endpt,
     tp->base.remote_name.port = 0;
 
     /* Transport info. */
-    tp->base.info = (char*) pj_pool_alloc(pool, M);
+    tp->base.info = pj_pool_alloc(pool, M);
     pj_ansi_snprintf( 
 	tp->base.info, M, "udp %s:%d [published as %s:%d]",
 	pj_inet_ntoa(((pj_sockaddr_in*)&tp->base.local_addr)->sin_addr),
@@ -544,8 +542,7 @@ PJ_DEF(pj_status_t) pjsip_udp_transport_attach( pjsip_endpoint *endpt,
 
     /* Create rdata and put it in the array. */
     tp->rdata_cnt = 0;
-    tp->rdata = (pjsip_rx_data**)
-    		pj_pool_calloc(tp->base.pool, async_cnt, 
+    tp->rdata = pj_pool_calloc(tp->base.pool, async_cnt, 
 			       sizeof(pjsip_rx_data*));
     for (i=0; i<async_cnt; ++i) {
 	pj_pool_t *rdata_pool = pjsip_endpt_create_pool(endpt, "rtd%p", 

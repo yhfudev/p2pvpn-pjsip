@@ -19,9 +19,7 @@
 #include <pjmedia/errno.h>
 #include <pjmedia/types.h>
 #include <pj/string.h>
-#if PJMEDIA_SOUND_IMPLEMENTATION == PJMEDIA_SOUND_PORTAUDIO_SOUND
-#   include <portaudio.h>
-#endif
+#include <portaudio.h>
 
 
 

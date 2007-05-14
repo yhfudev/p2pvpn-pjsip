@@ -72,7 +72,7 @@ static void on_read_complete(pj_ioqueue_key_t *key,
                              pj_ioqueue_op_key_t *op_key,
                              pj_ssize_t bytes_read)
 {
-    test_item *item = (test_item*)pj_ioqueue_get_user_data(key);
+    test_item *item = pj_ioqueue_get_user_data(key);
     pj_status_t rc;
     int data_is_available = 1;
 
@@ -150,7 +150,7 @@ static void on_write_complete(pj_ioqueue_key_t *key,
                               pj_ioqueue_op_key_t *op_key,
                               pj_ssize_t bytes_sent)
 {
-    test_item *item = (test_item*) pj_ioqueue_get_user_data(key);
+    test_item *item = pj_ioqueue_get_user_data(key);
     
     //TRACE_((THIS_FILE, "     write complete: sent = %d", bytes_sent));
 
@@ -188,7 +188,7 @@ struct thread_arg
 /* The worker thread. */
 static int worker_thread(void *p)
 {
-    struct thread_arg *arg = (struct thread_arg*) p;
+    struct thread_arg *arg = p;
     const pj_time_val timeout = {0, 100};
     int rc;
 
@@ -249,9 +249,8 @@ static int perform_test(int sock_type, const char *type_name,
     if (!pool)
         return -10;
 
-    items = (test_item*) pj_pool_alloc(pool, sockpair_cnt*sizeof(test_item));
-    thread = (pj_thread_t**)
-    	     pj_pool_alloc(pool, thread_cnt*sizeof(pj_thread_t*));
+    items = pj_pool_alloc(pool, sockpair_cnt*sizeof(test_item));
+    thread = pj_pool_alloc(pool, thread_cnt*sizeof(pj_thread_t*));
 
     TRACE_((THIS_FILE, "     creating ioqueue.."));
     rc = pj_ioqueue_create(pool, sockpair_cnt*2, &ioqueue);
@@ -266,8 +265,8 @@ static int perform_test(int sock_type, const char *type_name,
 
         items[i].ioqueue = ioqueue;
         items[i].buffer_size = buffer_size;
-        items[i].outgoing_buffer = (char*) pj_pool_alloc(pool, buffer_size);
-        items[i].incoming_buffer = (char*) pj_pool_alloc(pool, buffer_size);
+        items[i].outgoing_buffer = pj_pool_alloc(pool, buffer_size);
+        items[i].incoming_buffer = pj_pool_alloc(pool, buffer_size);
         items[i].bytes_recv = items[i].bytes_sent = 0;
 
         /* randomize outgoing buffer. */
@@ -332,7 +331,7 @@ static int perform_test(int sock_type, const char *type_name,
     for (i=0; i<thread_cnt; ++i) {
 	struct thread_arg *arg;
 
-	arg = (struct thread_arg*) pj_pool_zalloc(pool, sizeof(*arg));
+	arg = pj_pool_zalloc(pool, sizeof(*arg));
 	arg->id = i;
 	arg->ioqueue = ioqueue;
 	arg->counter = 0;
@@ -505,7 +504,7 @@ int ioqueue_perf_test(void)
     PJ_LOG(3,(THIS_FILE, "   ======================================="));
 
     best_bandwidth = 0;
-    for (i=0; i<(int)(sizeof(test_param)/sizeof(test_param[0])); ++i) {
+    for (i=0; i<sizeof(test_param)/sizeof(test_param[0]); ++i) {
         pj_size_t bandwidth;
 
         rc = perform_test(test_param[i].type, 

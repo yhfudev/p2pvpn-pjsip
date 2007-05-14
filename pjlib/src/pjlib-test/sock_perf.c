@@ -69,8 +69,8 @@ static int sock_producer_consumer(int sock_type,
     }
 
     /* Create buffers. */
-    outgoing_buffer = (char*) pj_pool_alloc(pool, buf_size);
-    incoming_buffer = (char*) pj_pool_alloc(pool, buf_size);
+    outgoing_buffer = pj_pool_alloc(pool, buf_size);
+    incoming_buffer = pj_pool_alloc(pool, buf_size);
 
     /* Start loop. */
     pj_get_timestamp(&start);
@@ -158,17 +158,11 @@ int sock_perf_test(void)
 
     PJ_LOG(3,("", "...benchmarking socket "
                   "(2 sockets, packet=512, single threaded):"));
-
-    /* Disable this test on Symbian since UDP connect()/send() failed
-     * with S60 3rd edition (including MR2).
-     * See http://www.pjsip.org/trac/ticket/264
-     */    
-#if !defined(PJ_SYMBIAN) || PJ_SYMBIAN==0
+    
     /* Benchmarking UDP */
     rc = sock_producer_consumer(PJ_SOCK_DGRAM, 512, LOOP, &bandwidth);
     if (rc != 0) return rc;
     PJ_LOG(3,("", "....bandwidth UDP = %d KB/s", bandwidth));
-#endif
 
     /* Benchmarking TCP */
     rc = sock_producer_consumer(PJ_SOCK_STREAM, 512, LOOP, &bandwidth);

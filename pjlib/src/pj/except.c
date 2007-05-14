@@ -41,8 +41,7 @@ PJ_DEF(void) pj_throw_exception_(int exception_id)
 {
     struct pj_exception_state_t *handler;
 
-    handler = (struct pj_exception_state_t*) 
-	      pj_thread_local_get(thread_local_id);
+    handler = pj_thread_local_get(thread_local_id);
     if (handler == NULL) {
         PJ_LOG(1,("except.c", "!!!FATAL: unhandled exception %s!\n", 
 		   pj_exception_id_name(exception_id)));
@@ -79,8 +78,7 @@ PJ_DEF(void) pj_push_exception_handler_(struct pj_exception_state_t *rec)
 	pj_assert(thread_local_id != -1);
 	pj_atexit(&exception_cleanup);
     }
-    parent_handler = (struct pj_exception_state_t *)
-		      pj_thread_local_get(thread_local_id);
+    parent_handler = pj_thread_local_get(thread_local_id);
     rec->prev = parent_handler;
     pj_thread_local_set(thread_local_id, rec);
 }
@@ -89,8 +87,7 @@ PJ_DEF(void) pj_pop_exception_handler_(void)
 {
     struct pj_exception_state_t *handler;
 
-    handler = (struct pj_exception_state_t *)
-	      pj_thread_local_get(thread_local_id);
+    handler = pj_thread_local_get(thread_local_id);
     pj_assert(handler != NULL);
     pj_thread_local_set(thread_local_id, handler->prev);
 }

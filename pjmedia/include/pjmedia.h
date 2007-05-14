@@ -38,6 +38,7 @@
 #include <pjmedia/jbuf.h>
 #include <pjmedia/master_port.h>
 #include <pjmedia/mem_port.h>
+#include <pjmedia/mp3_port.h>
 #include <pjmedia/null_port.h>
 #include <pjmedia/plc.h>
 #include <pjmedia/port.h>
@@ -53,7 +54,6 @@
 #include <pjmedia/splitcomb.h>
 #include <pjmedia/tonegen.h>
 #include <pjmedia/transport.h>
-#include <pjmedia/transport_ice.h>
 #include <pjmedia/transport_udp.h>
 #include <pjmedia/wav_playlist.h>
 #include <pjmedia/wav_port.h>

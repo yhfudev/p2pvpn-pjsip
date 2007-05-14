@@ -37,7 +37,7 @@ PJ_DEF(unsigned) pjsua_acc_get_count(void)
  */
 PJ_DEF(pj_bool_t) pjsua_acc_is_valid(pjsua_acc_id acc_id)
 {
-    return acc_id>=0 && acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc) &&
+    return acc_id>=0 && acc_id<PJ_ARRAY_SIZE(pjsua_var.acc) &&
 	   pjsua_var.acc[acc_id].valid;
 }
 
@@ -185,8 +185,7 @@ static pj_status_t initialize_acc(unsigned acc_id)
 
 	pj_strdup_with_null(pjsua_var.pool, &tmp, 
 			    &pjsua_var.ua_cfg.outbound_proxy[i]);
-	r = (pjsip_route_hdr*)
-	    pjsip_parse_hdr(pjsua_var.pool, &hname, tmp.ptr, tmp.slen, NULL);
+	r = pjsip_parse_hdr(pjsua_var.pool, &hname, tmp.ptr, tmp.slen, NULL);
 	if (r == NULL) {
 	    pjsua_perror(THIS_FILE, "Invalid outbound proxy URI",
 			 PJSIP_EINVALIDURI);
@@ -201,8 +200,7 @@ static pj_status_t initialize_acc(unsigned acc_id)
 	pj_str_t tmp;
 
 	pj_strdup_with_null(pjsua_var.pool, &tmp, &acc_cfg->proxy[i]);
-	r = (pjsip_route_hdr*)
-	    pjsip_parse_hdr(pjsua_var.pool, &hname, tmp.ptr, tmp.slen, NULL);
+	r = pjsip_parse_hdr(pjsua_var.pool, &hname, tmp.ptr, tmp.slen, NULL);
 	if (r == NULL) {
 	    pjsua_perror(THIS_FILE, "Invalid URI in account route set",
 			 PJ_EINVAL);
@@ -324,8 +322,7 @@ PJ_DEF(pj_status_t) pjsua_acc_add_local( pjsua_transport_id tid,
     char uri[PJSIP_MAX_URL_SIZE];
 
     /* ID must be valid */
-    PJ_ASSERT_RETURN(tid>=0 && tid<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    PJ_ASSERT_RETURN(tid>=0 && tid<PJ_ARRAY_SIZE(pjsua_var.tpdata), PJ_EINVAL);
 
     /* Transport must be valid */
     PJ_ASSERT_RETURN(t->data.ptr != NULL, PJ_EINVAL);
@@ -436,7 +433,7 @@ PJ_DEF(pj_status_t) pjsua_acc_set_online_status( pjsua_acc_id acc_id,
 static void regc_cb(struct pjsip_regc_cbparam *param)
 {
 
-    pjsua_acc *acc = (pjsua_acc*) param->token;
+    pjsua_acc *acc = param->token;
 
     PJSUA_LOCK();
 
@@ -685,22 +682,22 @@ PJ_DEF(pj_status_t) pjsua_acc_get_info( pjsua_acc_id acc_id,
     info->online_status = acc->online_status;
     
     if (acc->reg_last_err) {
-	info->status = (pjsip_status_code) acc->reg_last_err;
+	info->status = acc->reg_last_err;
 	pj_strerror(acc->reg_last_err, info->buf_, sizeof(info->buf_));
 	info->status_text = pj_str(info->buf_);
     } else if (acc->reg_last_code) {
 	if (info->has_registration) {
-	    info->status = (pjsip_status_code) acc->reg_last_code;
+	    info->status = acc->reg_last_code;
 	    info->status_text = *pjsip_get_status_text(acc->reg_last_code);
 	} else {
-	    info->status = (pjsip_status_code) 0;
+	    info->status = 0;
 	    info->status_text = pj_str("not registered");
 	}
     } else if (acc->cfg.reg_uri.slen) {
-	info->status = PJSIP_SC_TRYING;
+	info->status = 100;
 	info->status_text = pj_str("In Progress");
     } else {
-	info->status = (pjsip_status_code) 0;
+	info->status = 0;
 	info->status_text = pj_str("does not register");
     }
     
@@ -819,7 +816,7 @@ PJ_DEF(pjsua_acc_id) pjsua_acc_find_for_outgoing(const pj_str_t *url)
 	return pjsua_var.default_acc;
     }
 
-    sip_uri = (pjsip_sip_uri*) pjsip_uri_get_uri(uri);
+    sip_uri = pjsip_uri_get_uri(uri);
 
     /* Find matching domain AND port */
     for (i=0; i<pjsua_var.acc_cnt; ++i) {
@@ -957,8 +954,7 @@ PJ_DEF(pj_status_t) pjsua_acc_create_request(pjsua_acc_id acc_id,
     /* Copy routeset */
     r = acc->route_set.next;
     while (r != &acc->route_set) {
-	pjsip_msg_add_hdr(tdata->msg, 
-			  (pjsip_hdr*)pjsip_hdr_clone(tdata->pool, r));
+	pjsip_msg_add_hdr(tdata->msg, pjsip_hdr_clone(tdata->pool, r));
 	r = r->next;
     }
     
@@ -1040,7 +1036,7 @@ PJ_DEF(pj_status_t) pjsua_acc_create_uac_contact( pj_pool_t *pool,
 	return status;
 
     /* Create the contact header */
-    contact->ptr = (char*)pj_pool_alloc(pool, PJSIP_MAX_URL_SIZE);
+    contact->ptr = pj_pool_alloc(pool, PJSIP_MAX_URL_SIZE);
     contact->slen = pj_ansi_snprintf(contact->ptr, PJSIP_MAX_URL_SIZE,
 				     "%.*s%s<%s:%.*s%s%.*s:%d;transport=%s>",
 				     (int)acc->display.slen,
@@ -1101,18 +1097,17 @@ PJ_DEF(pj_status_t) pjsua_acc_create_uas_contact( pj_pool_t *pool,
 	pjsip_uri *uri = NULL;
 
 	/* Otherwise URI is Contact URI */
-	h_contact = (pjsip_contact_hdr*)
-		    pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT,
+	h_contact = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT,
 				       NULL);
 	if (h_contact)
-	    uri = (pjsip_uri*) pjsip_uri_get_uri(h_contact->uri);
+	    uri = pjsip_uri_get_uri(h_contact->uri);
 	
 
 	/* Or if Contact URI is not present, take the remote URI from
 	 * the From URI.
 	 */
 	if (uri == NULL)
-	    uri = (pjsip_uri*) pjsip_uri_get_uri(rdata->msg_info.from->uri);
+	    uri = pjsip_uri_get_uri(rdata->msg_info.from->uri);
 
 
 	/* Can only do sip/sips scheme at present. */
@@ -1147,7 +1142,7 @@ PJ_DEF(pj_status_t) pjsua_acc_create_uas_contact( pj_pool_t *pool,
 	return status;
 
     /* Create the contact header */
-    contact->ptr = (char*) pj_pool_alloc(pool, PJSIP_MAX_URL_SIZE);
+    contact->ptr = pj_pool_alloc(pool, PJSIP_MAX_URL_SIZE);
     contact->slen = pj_ansi_snprintf(contact->ptr, PJSIP_MAX_URL_SIZE,
 				     "%.*s%s<%s:%.*s%s%.*s:%d;transport=%s>",
 				     (int)acc->display.slen,
@@ -1174,7 +1169,7 @@ PJ_DEF(pj_status_t) pjsua_acc_set_transport( pjsua_acc_id acc_id,
     PJ_ASSERT_RETURN(pjsua_acc_is_valid(acc_id), PJ_EINVAL);
     acc = &pjsua_var.acc[acc_id];
 
-    PJ_ASSERT_RETURN(tp_id >= 0 && tp_id < (int)PJ_ARRAY_SIZE(pjsua_var.tpdata),
+    PJ_ASSERT_RETURN(tp_id >= 0 && tp_id < PJ_ARRAY_SIZE(pjsua_var.tpdata),
 		     PJ_EINVAL);
     
     acc->cfg.transport_id = tp_id;

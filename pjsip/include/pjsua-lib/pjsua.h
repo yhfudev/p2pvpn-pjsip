@@ -902,27 +902,6 @@ typedef struct pjsua_config
      */
     pj_str_t	    outbound_proxy[4];
 
-    /**
-     * Specify domain name to be resolved with DNS SRV resolution to get the
-     * address of the STUN servers. Alternatively application may specify
-     * \a stun_host and \a stun_relay_host instead.
-     *
-     * If DNS SRV resolution failed for this domain, then DNS A resolution
-     * will be performed only if \a stun_host is specified.
-     */
-    pj_str_t	    stun_domain;
-
-    /**
-     * Specify STUN server to be used, in "HOST[:PORT]" format. If port is
-     * not specified, default port 3478 will be used.
-     */
-    pj_str_t	    stun_host;
-
-    /**
-     * Specify STUN relay server to be used.
-     */
-    pj_str_t	    stun_relay_host;
-
     /** 
      * Number of credentials in the credential array.
      */
@@ -1022,9 +1001,6 @@ PJ_INLINE(void) pjsua_config_dup(pj_pool_t *pool,
     }
 
     pj_strdup_with_null(pool, &dst->user_agent, &src->user_agent);
-    pj_strdup_with_null(pool, &dst->stun_domain, &src->stun_domain);
-    pj_strdup_with_null(pool, &dst->stun_host, &src->stun_host);
-    pj_strdup_with_null(pool, &dst->stun_relay_host, &src->stun_relay_host);
 }
 
 
@@ -1328,14 +1304,7 @@ PJ_DECL(void) pjsua_perror(const char *sender, const char *title,
 			   pj_status_t status);
 
 
-/**
- * This is a utility function to dump the stack states to log, using
- * verbosity level 3.
- *
- * @param detail	Will print detailed output (such as list of
- *			SIP transactions) when non-zero.
- */
-PJ_DECL(void) pjsua_dump(pj_bool_t detail);
+
 
 /**
  * @}
@@ -1362,6 +1331,60 @@ PJ_DECL(void) pjsua_dump(pj_bool_t detail);
 /** SIP transport identification.
  */
 typedef int pjsua_transport_id;
+
+
+/**
+ * This structure describes STUN configuration for SIP and media transport,
+ * and is embedded inside pjsua_transport_config structure.
+ */
+typedef struct pjsua_stun_config
+{
+    /**
+     * The first STUN server IP address or hostname.
+     */
+    pj_str_t	stun_srv1;
+
+    /**
+     * Port number of the first STUN server.
+     * If zero, default STUN port will be used.
+     */
+    unsigned	stun_port1;
+    
+    /**
+     * Optional second STUN server IP address or hostname, for which the
+     * result of the mapping request will be compared to. If the value
+     * is empty, only one STUN server will be used.
+     */
+    pj_str_t	stun_srv2;
+
+    /**
+     * Port number of the second STUN server.
+     * If zero, default STUN port will be used.
+     */
+    unsigned	stun_port2;
+
+} pjsua_stun_config;
+
+
+
+/**
+ * Call this function to initialize STUN config with default values.
+ * STUN config is normally embedded inside pjsua_transport_config, so
+ * normally there is no need to call this function and rather just
+ * call pjsua_transport_config_default() instead.
+ *
+ * @param cfg	    The STUN config to be initialized.
+ *
+ * \par Python:
+ * The corresponding Python function creates and initialize the config:
+ * \code
+    stun_cfg = py_pjsua.stun_config_default()
+ * \endcode
+ */
+PJ_INLINE(void) pjsua_stun_config_default(pjsua_stun_config *cfg)
+{
+    pj_bzero(cfg, sizeof(*cfg));
+}
 
 
 /**
@@ -1412,6 +1435,16 @@ typedef struct pjsua_transport_config
     pj_str_t		bound_addr;
 
     /**
+     * Flag to indicate whether STUN should be used.
+     */
+    pj_bool_t		use_stun;
+
+    /**
+     * STUN configuration, must be specified when STUN is used.
+     */
+    pjsua_stun_config	stun_config;
+
+    /**
      * This specifies TLS settings for TLS transport. It is only be used
      * when this transport config is being used to create a SIP TLS
      * transport.
@@ -1435,7 +1468,42 @@ typedef struct pjsua_transport_config
 PJ_INLINE(void) pjsua_transport_config_default(pjsua_transport_config *cfg)
 {
     pj_bzero(cfg, sizeof(*cfg));
+    pjsua_stun_config_default(&cfg->stun_config);
     pjsip_tls_setting_default(&cfg->tls_setting);
+}
+
+
+/**
+ * This is a utility function to normalize STUN config. It's only
+ * used internally by the library.
+ *
+ * @param cfg	    The STUN config to be initialized.
+ *
+ * \par Python:
+ * \code
+    py_pjsua.normalize_stun_config(cfg)
+ * \code
+ */
+PJ_INLINE(void) pjsua_normalize_stun_config( pjsua_stun_config *cfg )
+{
+    if (cfg->stun_srv1.slen) {
+
+	if (cfg->stun_port1 == 0)
+	    cfg->stun_port1 = 3478;
+
+	if (cfg->stun_srv2.slen == 0) {
+	    cfg->stun_srv2 = cfg->stun_srv1;
+	    cfg->stun_port2 = cfg->stun_port1;
+	} else {
+	    if (cfg->stun_port2 == 0)
+		cfg->stun_port2 = 3478;
+	}
+
+    } else {
+	cfg->stun_port1 = 0;
+	cfg->stun_srv2.slen = 0;
+	cfg->stun_port2 = 0;
+    }
 }
 
 
@@ -1454,8 +1522,19 @@ PJ_INLINE(void) pjsua_transport_config_dup(pj_pool_t *pool,
 					   pjsua_transport_config *dst,
 					   const pjsua_transport_config *src)
 {
-    PJ_UNUSED_ARG(pool);
     pj_memcpy(dst, src, sizeof(*src));
+
+    if (src->stun_config.stun_srv1.slen) {
+	pj_strdup_with_null(pool, &dst->stun_config.stun_srv1,
+			    &src->stun_config.stun_srv1);
+    }
+
+    if (src->stun_config.stun_srv2.slen) {
+	pj_strdup_with_null(pool, &dst->stun_config.stun_srv2,
+			    &src->stun_config.stun_srv2);
+    }
+
+    pjsua_normalize_stun_config(&dst->stun_config);
 }
 
 
@@ -3470,15 +3549,6 @@ struct pjsua_media_config
      */
     int			jb_max;
 
-    /**
-     * Enable ICE
-     */
-    pj_bool_t		enable_ice;
-
-    /**
-     * Enable ICE media relay.
-     */
-    pj_bool_t		enable_relay;
 };
 
 
@@ -3917,18 +3987,21 @@ PJ_DECL(pj_status_t) pjsua_player_destroy(pjsua_player_id id);
 
 /**
  * Create a file recorder, and automatically connect this recorder to
- * the conference bridge. The recorder currently supports recording WAV file.
- * The type of the recorder to use is determined by the extension of the file 
- * (e.g. ".wav").
+ * the conference bridge. The recorder currently supports recording WAV file,
+ * and on Windows, MP3 file. The type of the recorder to use is determined
+ * by the extension of the file (e.g. ".wav" or ".mp3").
  *
  * @param filename	Output file name. The function will determine the
  *			default format to be used based on the file extension.
- *			Currently ".wav" is supported on all platforms.
+ *			Currently ".wav" is supported on all platforms, and
+ *			also ".mp3" is support on Windows.
  * @param enc_type	Optionally specify the type of encoder to be used to
  *			compress the media, if the file can support different
  *			encodings. This value must be zero for now.
  * @param enc_param	Optionally specify codec specific parameter to be 
- *			passed to the file writer. 
+ *			passed to the file writer. For .MP3 recorder, this
+ *			can point to pjmedia_mp3_encoder_option structure to
+ *			specify additional settings for the .mp3 recorder.
  *			For .WAV recorder, this value must be NULL.
  * @param max_size	Maximum file size. Specify zero or -1 to remove size
  *			limitation. This value must be zero or -1 for now.

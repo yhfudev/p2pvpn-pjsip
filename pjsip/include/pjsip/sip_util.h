@@ -258,8 +258,6 @@ typedef struct pjsip_send_state
 		   pj_bool_t *cont);
 } pjsip_send_state;
 
-typedef void (*pjsip_endpt_callback)(pjsip_send_state*, pj_ssize_t sent,
-									 pj_bool_t *cont);
 /**
  * Send outgoing request statelessly The function will take care of which 
  * destination and transport to use based on the information in the message,
@@ -281,7 +279,9 @@ PJ_DECL(pj_status_t)
 pjsip_endpt_send_request_stateless( pjsip_endpoint *endpt,
 				    pjsip_tx_data *tdata,
 				    void *token,
-				    pjsip_endpt_callback cb);
+				    void (*cb)(pjsip_send_state*,
+					       pj_ssize_t sent,
+					       pj_bool_t *cont));
 
 /**
  * This structure describes destination information to send response.
@@ -357,7 +357,9 @@ PJ_DECL(pj_status_t) pjsip_endpt_send_response( pjsip_endpoint *endpt,
 					        pjsip_response_addr *res_addr,
 					        pjsip_tx_data *tdata,
 						void *token,
-						pjsip_endpt_callback cb);
+						void (*cb)(pjsip_send_state*,
+							   pj_ssize_t sent,
+							   pj_bool_t *cont));
 
 /**
  * This is a convenient function which wraps #pjsip_get_response_addr() and
@@ -380,7 +382,9 @@ PJ_DECL(pj_status_t) pjsip_endpt_send_response2(pjsip_endpoint *endpt,
 					        pjsip_rx_data *rdata,
 					        pjsip_tx_data *tdata,
 						void *token,
-						pjsip_endpt_callback cb);
+						void (*cb)(pjsip_send_state*,
+							   pj_ssize_t sent,
+							   pj_bool_t *cont));
 
 /**
  * This composite function sends response message statelessly to an incoming
@@ -441,7 +445,6 @@ PJ_DECL(pj_status_t) pjsip_endpt_respond( pjsip_endpoint *endpt,
 					  const pjsip_msg_body *body,
 					  pjsip_transaction **p_tsx );
 
-typedef void (*pjsip_endpt_send_callback)(void*, pjsip_event*);
 /**
  * Send outgoing request and initiate UAC transaction for the request.
  * This is an auxiliary function to be used by application to send arbitrary
@@ -466,7 +469,7 @@ PJ_DECL(pj_status_t) pjsip_endpt_send_request( pjsip_endpoint *endpt,
 					       pjsip_tx_data *tdata,
 					       pj_int32_t timeout,
 					       void *token,
-					       pjsip_endpt_send_callback cb);
+					       void (*cb)(void*,pjsip_event*));
 
 /**
  * @}

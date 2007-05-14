@@ -3,78 +3,6 @@ Microsoft Developer Studio Workspace File, Format Version 6.00
 
 ###############################################################################
 
-Project: "libgsmcodec"=.\THIRD_PARTY\BUILD\GSM\libgsmcodec.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
-Project: "libilbccodec"=.\THIRD_PARTY\BUILD\ILBC\libilbccodec.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
-Project: "libportaudio"=.\THIRD_PARTY\BUILD\PORTAUDIO\libportaudio.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
-Project: "libresample"=.\THIRD_PARTY\BUILD\RESAMPLE\libresample.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
-Project: "libresample_dll"=.\THIRD_PARTY\BUILD\RESAMPLE\libresample_dll.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
-Project: "libspeex"=.\third_party\build\speex\libspeex.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
 Project: "pjlib"=.\pjlib\build\pjlib.dsp - Package Owner=<4>
 
 Package=<5>
@@ -156,18 +84,6 @@ Package=<4>
 
 ###############################################################################
 
-Project: "pjnath"=.\pjnath\build\pjnath.dsp - Package Owner=<4>
-
-Package=<5>
-{{{
-}}}
-
-Package=<4>
-{{{
-}}}
-
-###############################################################################
-
 Project: "pjsip_core"=.\pjsip\build\pjsip_core.dsp - Package Owner=<4>
 
 Package=<5>
@@ -236,24 +152,6 @@ Package=<4>
     Begin Project Dependency
     Project_Dep_Name pjsua_lib
     End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name pjnath
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libgsmcodec
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libilbccodec
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libportaudio
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libspeex
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libresample
-    End Project Dependency
 }}}
 
 ###############################################################################
@@ -302,21 +200,6 @@ Package=<4>
     Begin Project Dependency
     Project_Dep_Name pjsua_lib
     End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libgsmcodec
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libilbccodec
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libportaudio
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libresample
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libspeex
-    End Project Dependency
 }}}
 
 ###############################################################################
@@ -352,24 +235,6 @@ Package=<4>
     End Project Dependency
     Begin Project Dependency
     Project_Dep_Name pjsua_lib
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libgsmcodec
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libilbccodec
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libportaudio
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libresample
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name libspeex
-    End Project Dependency
-    Begin Project Dependency
-    Project_Dep_Name pjnath
     End Project Dependency
 }}}
 

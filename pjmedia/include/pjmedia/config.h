@@ -75,12 +75,8 @@
 /**
  * Specify number of sound buffers. Larger number is better for sound
  * stability and to accomodate sound devices that are unable to send frames
- * in timely manner, however it would probably cause more audio delay (and 
- * definitely will take more memory). One individual buffer is normally 10ms
- * or 20 ms long, depending on ptime settings (samples_per_frame value).
- *
- * The setting here currently is used by the conference bridge, the splitter
- * combiner port, and dsound.c.
+ * in timely manner, however it would take more memory. One individual
+ * buffer is about 10 or 20 ms long.
  *
  * Default: 16
  */
@@ -108,55 +104,22 @@
 #endif
 
 
-/*
- * **   THIS MACRO IS DEPRECATED in 0.6.   **
- * ** See libresample for configuring this **
- *
+/**
  * Include small filter table in resample.
  * This adds about 9KB in rdata.
  */
-/*
 #ifndef PJMEDIA_HAS_SMALL_FILTER
 #   define PJMEDIA_HAS_SMALL_FILTER	    1
 #endif
-*/
 
-/*
- * **   THIS MACRO IS DEPRECATED in 0.6.   **
- * ** See libresample for configuring this **
- *
+
+/**
  * Include large filter table in resample.
  * This adds about 32KB in rdata.
  */
-/*
 #ifndef PJMEDIA_HAS_LARGE_FILTER
 #   define PJMEDIA_HAS_LARGE_FILTER	    1
 #endif
-*/
-
-/**
- * Specify whether libresample should be used for the sampling
- * rate conversion. This macro and PJMEDIA_HAS_SPEEX_RESAMPLE
- * are mutually exclusive. 
- *
- * Default: 1 (Yes)
- */
-#ifndef PJMEDIA_HAS_LIBRESAMPLE
-#   define PJMEDIA_HAS_LIBRESAMPLE	    1
-#endif
-
-
-/**
- * Specify whether Speex sample rate convertor should be used for the
- * sampling rate conversion. This macro and PJMEDIA_HAS_LIBRESAMPLE
- * are mutually exclusive.
- *
- * Default: 0
- */
-#ifndef PJMEDIA_HAS_SPEEX_RESAMPLE
-#   define PJMEDIA_HAS_SPEEX_RESAMPLE	    0
-#endif
-
 
 
 /**
@@ -276,14 +239,9 @@
 
 /**
  * Enable Steve Underwood's PLC.
- *
- * ** This has now been deprecated. If the codec does not have **
- * ** PLC, then no PLC will be used for that particular codec. **
- *
- * Set this to zero, or other link error will occur.
  */
 #ifndef PJMEDIA_HAS_STEVEU_PLC
-#   define PJMEDIA_HAS_STEVEU_PLC		0
+#   define PJMEDIA_HAS_STEVEU_PLC		PJ_HAS_FLOATING_POINT
 #endif
 
 
@@ -313,7 +271,7 @@
  * 16 will effectively zero the signal.
  */
 #ifndef PJMEDIA_ECHO_SUPPRESS_FACTOR
-#   define PJMEDIA_ECHO_SUPPRESS_FACTOR		10
+#   define PJMEDIA_ECHO_SUPPRESS_FACTOR		4
 #endif
 
 

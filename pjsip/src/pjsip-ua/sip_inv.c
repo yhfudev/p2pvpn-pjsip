@@ -169,7 +169,7 @@ void inv_set_cause(pjsip_inv_session *inv, int cause_code,
 		   const pj_str_t *cause_text)
 {
     if (cause_code > inv->cause) {
-	inv->cause = (pjsip_status_code) cause_code;
+	inv->cause = cause_code;
 	if (cause_text)
 	    pj_strdup(inv->pool, &inv->cause_text, cause_text);
 	else if (cause_code/100 == 2)
@@ -229,7 +229,7 @@ static pj_bool_t mod_inv_on_rx_request(pjsip_rx_data *rdata)
     if (dlg == NULL)
 	return PJ_FALSE;
 
-    inv = (pjsip_inv_session*) dlg->mod_data[mod_inv.mod.id];
+    inv = dlg->mod_data[mod_inv.mod.id];
 
     /* Report to dialog that we handle INVITE, CANCEL, BYE, ACK. 
      * If we need to send response, it will be sent in the state
@@ -356,13 +356,13 @@ static void mod_inv_on_tsx_state(pjsip_transaction *tsx, pjsip_event *e)
     if (mod_inv.cb.on_tsx_state_changed && inv->notify)
 	(*mod_inv.cb.on_tsx_state_changed)(inv, tsx, e);
 
-    /* Clear invite transaction when tsx is confirmed.
+    /* Clear invite transaction when tsx is confirmed. 
      * Previously we set invite_tsx to NULL only when transaction has
      * terminated, but this didn't work when ACK has the same Via branch
      * value as the INVITE (see http://www.pjsip.org/trac/ticket/113)
      */
     if (tsx->state>=PJSIP_TSX_STATE_CONFIRMED && tsx == inv->invite_tsx)
-        inv->invite_tsx = NULL;
+	inv->invite_tsx = NULL;
 }
 
 
@@ -411,7 +411,7 @@ PJ_DEF(pjsip_module*) pjsip_inv_usage_instance(void)
  */
 PJ_DEF(pjsip_inv_session*) pjsip_dlg_get_inv_session(pjsip_dialog *dlg)
 {
-    return (pjsip_inv_session*) dlg->mod_data[mod_inv.mod.id];
+    return dlg->mod_data[mod_inv.mod.id];
 }
 
 
@@ -452,7 +452,7 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uac( pjsip_dialog *dlg,
 	options |= PJSIP_INV_SUPPORT_TIMER;
 
     /* Create the session */
-    inv = PJ_POOL_ZALLOC_T(dlg->pool, pjsip_inv_session);
+    inv = pj_pool_zalloc(dlg->pool, sizeof(pjsip_inv_session));
     pj_assert(inv != NULL);
 
     inv->pool = dlg->pool;
@@ -461,7 +461,7 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uac( pjsip_dialog *dlg,
     inv->dlg = dlg;
     inv->options = options;
     inv->notify = PJ_TRUE;
-    inv->cause = (pjsip_status_code) 0;
+    inv->cause = 0;
 
     /* Object name will use the same dialog pointer. */
     pj_ansi_snprintf(inv->obj_name, PJ_MAX_OBJ_NAME, "inv%p", dlg);
@@ -577,8 +577,8 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request(pjsip_rx_data *rdata,
 	}
 
 	/* Parse and validate SDP */
-	status = pjmedia_sdp_parse(rdata->tp_info.pool, 
-				   (char*)body->data, body->len, &sdp);
+	status = pjmedia_sdp_parse(rdata->tp_info.pool, body->data, body->len,
+				   &sdp);
 	if (status == PJ_SUCCESS)
 	    status = pjmedia_sdp_validate(sdp);
 
@@ -650,7 +650,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request(pjsip_rx_data *rdata,
      * We just assume that peer supports standard INVITE, ACK, CANCEL, and BYE
      * implicitly by sending this INVITE.
      */
-    allow = (pjsip_allow_hdr*) pjsip_msg_find_hdr(msg, PJSIP_H_ALLOW, NULL);
+    allow = pjsip_msg_find_hdr(msg, PJSIP_H_ALLOW, NULL);
     if (allow) {
 	unsigned i;
 	const pj_str_t STR_UPDATE = { "UPDATE", 6 };
@@ -668,8 +668,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request(pjsip_rx_data *rdata,
     }
 
     /* Check Supported header */
-    sup_hdr = (pjsip_supported_hdr*)
-	      pjsip_msg_find_hdr(msg, PJSIP_H_SUPPORTED, NULL);
+    sup_hdr = pjsip_msg_find_hdr(msg, PJSIP_H_SUPPORTED, NULL);
     if (sup_hdr) {
 	unsigned i;
 	pj_str_t STR_100REL = { "100rel", 6};
@@ -684,8 +683,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request(pjsip_rx_data *rdata,
     }
 
     /* Check Require header */
-    req_hdr = (pjsip_require_hdr*)
-	      pjsip_msg_find_hdr(msg, PJSIP_H_REQUIRE, NULL);
+    req_hdr = pjsip_msg_find_hdr(msg, PJSIP_H_REQUIRE, NULL);
     if (req_hdr) {
 	unsigned i;
 	const pj_str_t STR_100REL = { "100rel", 6};
@@ -744,8 +742,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request(pjsip_rx_data *rdata,
 					       NULL);
 		pj_assert(h);
 		if (h) {
-		    sup_hdr = (pjsip_supported_hdr*)
-			      pjsip_hdr_clone(rdata->tp_info.pool, h);
+		    sup_hdr = pjsip_hdr_clone(rdata->tp_info.pool, h);
 		    pj_list_push_back(&res_hdr_list, sup_hdr);
 		}
 	    }
@@ -785,8 +782,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request(pjsip_rx_data *rdata,
 					   NULL);
 	    pj_assert(h);
 	    if (h) {
-		sup_hdr = (pjsip_supported_hdr*)
-			  pjsip_hdr_clone(rdata->tp_info.pool, h);
+		sup_hdr = pjsip_hdr_clone(rdata->tp_info.pool, h);
 		pj_list_push_back(&res_hdr_list, sup_hdr);
 	    }
 
@@ -818,7 +814,7 @@ on_return:
 	while (h != &res_hdr_list) {
 	    pjsip_hdr *cloned;
 
-	    cloned = (pjsip_hdr*) pjsip_hdr_clone(tdata->pool, h);
+	    cloned = pjsip_hdr_clone(tdata->pool, h);
 	    PJ_ASSERT_RETURN(cloned, PJ_ENOMEM);
 
 	    pjsip_msg_add_hdr(tdata->msg, cloned);
@@ -878,7 +874,7 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uas( pjsip_dialog *dlg,
 	options |= PJSIP_INV_SUPPORT_TIMER;
 
     /* Create the session */
-    inv = PJ_POOL_ZALLOC_T(dlg->pool, pjsip_inv_session);
+    inv = pj_pool_zalloc(dlg->pool, sizeof(pjsip_inv_session));
     pj_assert(inv != NULL);
 
     inv->pool = dlg->pool;
@@ -887,7 +883,7 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uas( pjsip_dialog *dlg,
     inv->dlg = dlg;
     inv->options = options;
     inv->notify = PJ_TRUE;
-    inv->cause = (pjsip_status_code) 0;
+    inv->cause = 0;
 
     /* Object name will use the same dialog pointer. */
     pj_ansi_snprintf(inv->obj_name, PJ_MAX_OBJ_NAME, "inv%p", dlg);
@@ -897,7 +893,7 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uas( pjsip_dialog *dlg,
 	pjsip_msg_body *body = msg->body;
 
 	/* Parse and validate SDP */
-	status = pjmedia_sdp_parse(inv->pool, (char*)body->data, body->len,
+	status = pjmedia_sdp_parse(inv->pool, body->data, body->len,
 				   &rem_sdp);
 	if (status == PJ_SUCCESS)
 	    status = pjmedia_sdp_validate(rem_sdp);
@@ -939,7 +935,8 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uas( pjsip_dialog *dlg,
     inv->invite_tsx = pjsip_rdata_get_tsx(rdata);
 
     /* Attach our data to the transaction. */
-    tsx_inv_data = PJ_POOL_ZALLOC_T(inv->invite_tsx->pool, struct tsx_inv_data);
+    tsx_inv_data = pj_pool_zalloc(inv->invite_tsx->pool, 
+				  sizeof(struct tsx_inv_data));
     tsx_inv_data->inv = inv;
     inv->invite_tsx->mod_data[mod_inv.mod.id] = tsx_inv_data;
 
@@ -1000,12 +997,12 @@ PJ_DEF(pj_status_t) pjsip_inv_terminate( pjsip_inv_session *inv,
 static void *clone_sdp(pj_pool_t *pool, const void *data, unsigned len)
 {
     PJ_UNUSED_ARG(len);
-    return pjmedia_sdp_session_clone(pool, (const pjmedia_sdp_session*)data);
+    return pjmedia_sdp_session_clone(pool, data);
 }
 
 static int print_sdp(pjsip_msg_body *body, char *buf, pj_size_t len)
 {
-    return pjmedia_sdp_print((const pjmedia_sdp_session*)body->data, buf, len);
+    return pjmedia_sdp_print(body->data, buf, len);
 }
 
 
@@ -1017,7 +1014,7 @@ PJ_DEF(pj_status_t) pjsip_create_sdp_body( pj_pool_t *pool,
     const pj_str_t STR_SDP = { "sdp", 3 };
     pjsip_msg_body *body;
 
-    body = PJ_POOL_ZALLOC_T(pool, pjsip_msg_body);
+    body = pj_pool_zalloc(pool, sizeof(pjsip_msg_body));
     PJ_ASSERT_RETURN(body != NULL, PJ_ENOMEM);
 
     body->content_type.type = STR_APPLICATION;
@@ -1085,7 +1082,7 @@ PJ_DEF(pj_status_t) pjsip_inv_invite( pjsip_inv_session *inv,
 	hdr = inv->dlg->inv_hdr.next;
 
 	while (hdr != &inv->dlg->inv_hdr) {
-	    pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)
+	    pjsip_msg_add_hdr(tdata->msg,
 			      pjsip_hdr_shallow_clone(tdata->pool, hdr));
 	    hdr = hdr->next;
 	}
@@ -1120,14 +1117,14 @@ PJ_DEF(pj_status_t) pjsip_inv_invite( pjsip_inv_session *inv,
     /* Add Allow header. */
     hdr = pjsip_endpt_get_capability(inv->dlg->endpt, PJSIP_H_ALLOW, NULL);
     if (hdr) {
-	pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)
+	pjsip_msg_add_hdr(tdata->msg,
 			  pjsip_hdr_shallow_clone(tdata->pool, hdr));
     }
 
     /* Add Supported header */
     hdr = pjsip_endpt_get_capability(inv->dlg->endpt, PJSIP_H_SUPPORTED, NULL);
     if (hdr) {
-	pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)
+	pjsip_msg_add_hdr(tdata->msg,
 			  pjsip_hdr_shallow_clone(tdata->pool, hdr));
     }
 
@@ -1180,9 +1177,9 @@ static pj_status_t inv_check_sdp_in_incoming_msg( pjsip_inv_session *inv,
     pjmedia_sdp_session *sdp;
 
     /* Get/attach invite session's transaction data */
-    tsx_inv_data = (struct tsx_inv_data*) tsx->mod_data[mod_inv.mod.id];
+    tsx_inv_data = tsx->mod_data[mod_inv.mod.id];
     if (tsx_inv_data == NULL) {
-	tsx_inv_data = PJ_POOL_ZALLOC_T(tsx->pool, struct tsx_inv_data);
+	tsx_inv_data = pj_pool_zalloc(tsx->pool, sizeof(struct tsx_inv_data));
 	tsx_inv_data->inv = inv;
 	tsx->mod_data[mod_inv.mod.id] = tsx_inv_data;
     }
@@ -1210,8 +1207,7 @@ static pj_status_t inv_check_sdp_in_incoming_msg( pjsip_inv_session *inv,
 
     /* Parse the SDP body. */
 
-    status = pjmedia_sdp_parse(rdata->tp_info.pool, 
-			       (char*)msg->body->data,
+    status = pjmedia_sdp_parse(rdata->tp_info.pool, msg->body->data,
 			       msg->body->len, &sdp);
     if (status != PJ_SUCCESS) {
 	char errmsg[PJ_ERR_MSG_SIZE];
@@ -1591,8 +1587,7 @@ PJ_DEF(pj_status_t) pjsip_inv_reinvite( pjsip_inv_session *inv,
 	const pj_str_t STR_CONTACT = { "Contact", 7 };
 
 	pj_strdup_with_null(inv->dlg->pool, &tmp, new_contact);
-	contact_hdr = (pjsip_contact_hdr*)
-		      pjsip_parse_hdr(inv->dlg->pool, &STR_CONTACT, 
+	contact_hdr = pjsip_parse_hdr(inv->dlg->pool, &STR_CONTACT, 
 				      tmp.ptr, tmp.slen, NULL);
 	if (!contact_hdr) {
 	    status = PJSIP_EINVALIDURI;
@@ -1689,7 +1684,7 @@ PJ_DEF(pj_status_t) pjsip_inv_send_msg( pjsip_inv_session *inv,
 
 	pjsip_dlg_inc_lock(inv->dlg);
 
-	tsx_inv_data = PJ_POOL_ZALLOC_T(inv->pool, struct tsx_inv_data);
+	tsx_inv_data = pj_pool_zalloc(inv->pool, sizeof(struct tsx_inv_data));
 	tsx_inv_data->inv = inv;
 
 	pjsip_dlg_dec_lock(inv->dlg);
@@ -1705,7 +1700,7 @@ PJ_DEF(pj_status_t) pjsip_inv_send_msg( pjsip_inv_session *inv,
 	/* Can only do this to send response to original INVITE
 	 * request.
 	 */
-	PJ_ASSERT_RETURN((cseq=(pjsip_cseq_hdr*)pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CSEQ, NULL))!=NULL
+	PJ_ASSERT_RETURN((cseq=pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CSEQ, NULL))!=NULL
 			  && (cseq->cseq == inv->invite_tsx->cseq),
 			 PJ_EINVALIDOP);
 
@@ -2420,7 +2415,7 @@ static void inv_on_state_confirmed( pjsip_inv_session *inv, pjsip_event *e)
 		accept = pjsip_endpt_get_capability(dlg->endpt, PJSIP_H_ACCEPT,
 						    NULL);
 		if (accept) {
-		    pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)
+		    pjsip_msg_add_hdr(tdata->msg,
 				      pjsip_hdr_clone(tdata->pool, accept));
 		}
 

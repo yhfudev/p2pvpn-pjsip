@@ -111,7 +111,6 @@ PJ_DECL(void) pj_set_netos_error(pj_status_t code);
 PJ_DECL(pj_str_t) pj_strerror( pj_status_t statcode, 
 			       char *buf, pj_size_t bufsize);
 
-typedef pj_str_t (*pjsip_error_callback)(pj_status_t, char*, pj_size_t);
 /**
  * Register strerror message handler for the specified error space.
  * Application can register its own handler to supply the error message
@@ -133,7 +132,8 @@ typedef pj_str_t (*pjsip_error_callback)(pj_status_t, char*, pj_size_t);
  */
 PJ_DECL(pj_status_t) pj_register_strerror(pj_status_t start_code,
 					  pj_status_t err_space,
-					  pjsip_error_callback f);
+					  pj_str_t (*f)(pj_status_t,char*,
+							pj_size_t));
 
 /**
  * @hideinitializer
@@ -167,11 +167,7 @@ PJ_DECL(pj_status_t) pj_register_strerror(pj_status_t start_code,
  * @warning	Macro implementation; the syserr argument may be evaluated
  *		multiple times.
  */
-#if PJ_NATIVE_ERR_POSITIVE
-#   define PJ_STATUS_FROM_OS(e) (e == 0 ? PJ_SUCCESS : e + PJ_ERRNO_START_SYS)
-#else
-#   define PJ_STATUS_FROM_OS(e) (e == 0 ? PJ_SUCCESS : PJ_ERRNO_START_SYS - e)
-#endif
+#define PJ_STATUS_FROM_OS(e) (e == 0 ? PJ_SUCCESS : e + PJ_ERRNO_START_SYS)
 
 /**
  * @hideinitializer
@@ -183,11 +179,7 @@ PJ_DECL(pj_status_t) pj_register_strerror(pj_status_t start_code,
  *		multiple times.  If the statcode was not created by 
  *		pj_get_os_error or PJ_STATUS_FROM_OS, the results are undefined.
  */
-#if PJ_NATIVE_ERR_POSITIVE
-#   define PJ_STATUS_TO_OS(e) (e == 0 ? PJ_SUCCESS : e - PJ_ERRNO_START_SYS)
-#else
-#   define PJ_STATUS_TO_OS(e) (e == 0 ? PJ_SUCCESS : PJ_ERRNO_START_SYS - e)
-#endif
+#define PJ_STATUS_TO_OS(e) (e == 0 ? PJ_SUCCESS : e - PJ_ERRNO_START_SYS)
 
 
 /**
@@ -349,7 +341,6 @@ PJ_DECL(pj_status_t) pj_register_strerror(pj_status_t start_code,
  *  - PJMEDIA_ERRNO_START	(PJ_ERRNO_START_USER + PJ_ERRNO_SPACE_SIZE)
  *  - PJSIP_SIMPLE_ERRNO_START	(PJ_ERRNO_START_USER + PJ_ERRNO_SPACE_SIZE*2)
  *  - PJLIB_UTIL_ERRNO_START	(PJ_ERRNO_START_USER + PJ_ERRNO_SPACE_SIZE*3)
- *  - PJNATH_ERRNO_START	(PJ_ERRNO_START_USER + PJ_ERRNO_SPACE_SIZE*4)
  */
 
 

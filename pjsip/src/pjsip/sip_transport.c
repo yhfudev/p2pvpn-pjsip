@@ -97,7 +97,7 @@ struct transport_key
 /*
  * Transport names.
  */
-struct transport_names_t
+struct
 {
     pjsip_transport_type_e type;
     pj_uint16_t		   port;
@@ -216,7 +216,7 @@ pjsip_transport_get_flag_from_type( pjsip_transport_type_e type )
 		     PJSIP_TRANSPORT_UDP, 0);
 
     /* Check that argument is valid. */
-    PJ_ASSERT_RETURN((unsigned)type < PJ_ARRAY_SIZE(transport_names), 0);
+    PJ_ASSERT_RETURN(type < PJ_ARRAY_SIZE(transport_names), 0);
 
     /* Return transport flag. */
     return transport_names[type].flag;
@@ -235,7 +235,7 @@ pjsip_transport_get_default_port_for_type(pjsip_transport_type_e type)
 		     PJSIP_TRANSPORT_UDP, 0);
 
     /* Check that argument is valid. */
-    PJ_ASSERT_RETURN((unsigned)type < PJ_ARRAY_SIZE(transport_names), 5060);
+    PJ_ASSERT_RETURN(type < PJ_ARRAY_SIZE(transport_names), 5060);
 
     /* Return the port. */
     return transport_names[type].port;
@@ -253,7 +253,7 @@ PJ_DEF(const char*) pjsip_transport_get_type_name(pjsip_transport_type_e type)
 		     PJSIP_TRANSPORT_UDP, "Unknown");
 
     /* Check that argument is valid. */
-    PJ_ASSERT_RETURN((unsigned)type<PJ_ARRAY_SIZE(transport_names), "Unknown");
+    PJ_ASSERT_RETURN(type < PJ_ARRAY_SIZE(transport_names), "Unknown");
 
     /* Return the port. */
     return transport_names[type].name.ptr;
@@ -314,7 +314,7 @@ PJ_DEF(pj_status_t) pjsip_tx_data_create( pjsip_tpmgr *mgr,
     if (!pool)
 	return PJ_ENOMEM;
 
-    tdata = PJ_POOL_ZALLOC_T(pool, pjsip_tx_data);
+    tdata = pj_pool_zalloc(pool, sizeof(pjsip_tx_data));
     tdata->pool = pool;
     tdata->mgr = mgr;
     pj_ansi_snprintf(tdata->obj_name, PJ_MAX_OBJ_NAME, "tdta%p", tdata);
@@ -396,7 +396,7 @@ static char *get_msg_info(pj_pool_t *pool, const char *obj_name,
     const pjsip_cseq_hdr *cseq;
     int len;
 
-    cseq = (const pjsip_cseq_hdr*) pjsip_msg_find_hdr(msg, PJSIP_H_CSEQ, NULL);
+    cseq = pjsip_msg_find_hdr(msg, PJSIP_H_CSEQ, NULL);
     PJ_ASSERT_RETURN(cseq != NULL, "INVALID MSG");
 
     if (msg->type == PJSIP_REQUEST_MSG) {
@@ -414,11 +414,11 @@ static char *get_msg_info(pj_pool_t *pool, const char *obj_name,
 			       cseq->cseq, obj_name);
     }
 
-    if (len < 1 || len >= (int)sizeof(info_buf)) {
+    if (len < 1 || len >= sizeof(info_buf)) {
 	return (char*)obj_name;
     }
 
-    info = (char*) pj_pool_alloc(pool, len+1);
+    info = pj_pool_alloc(pool, len+1);
     pj_memcpy(info, info_buf, len+1);
 
     return info;
@@ -492,7 +492,7 @@ static void transport_send_callback(pjsip_transport *transport,
 				    void *token,
 				    pj_ssize_t size)
 {
-    pjsip_tx_data *tdata = (pjsip_tx_data*) token;
+    pjsip_tx_data *tdata = token;
 
     PJ_UNUSED_ARG(transport);
 
@@ -517,8 +517,7 @@ static pj_status_t mod_on_tx_msg(pjsip_tx_data *tdata)
 {
     /* Allocate buffer if necessary. */
     if (tdata->buf.start == NULL) {
-	tdata->buf.start = (char*) 
-			   pj_pool_alloc( tdata->pool, PJSIP_MAX_PKT_LEN);
+	tdata->buf.start = pj_pool_alloc( tdata->pool, PJSIP_MAX_PKT_LEN);
 	tdata->buf.cur = tdata->buf.start;
 	tdata->buf.end = tdata->buf.start + PJSIP_MAX_PKT_LEN;
     }
@@ -548,7 +547,9 @@ PJ_DEF(pj_status_t) pjsip_transport_send(  pjsip_transport *tr,
 					   const pj_sockaddr_t *addr,
 					   int addr_len,
 					   void *token,
-					   pjsip_tp_send_callback cb)
+					   void (*cb)(void *token, 
+						      pjsip_tx_data *tdata,
+						      pj_ssize_t))
 {
     pj_status_t status;
 
@@ -566,7 +567,7 @@ PJ_DEF(pj_status_t) pjsip_transport_send(  pjsip_transport *tr,
     tdata->tp_info.transport = tr;
     pj_memcpy(&tdata->tp_info.dst_addr, addr, addr_len);
     tdata->tp_info.dst_addr_len = addr_len;
-    if (((pj_sockaddr*)addr)->addr.sa_family == PJ_AF_INET) {
+    if (((pj_sockaddr*)addr)->sa_family == PJ_AF_INET) {
 	const char *str_addr;
 	str_addr = pj_inet_ntoa(((pj_sockaddr_in*)addr)->sin_addr);
 	pj_ansi_strcpy(tdata->tp_info.dst_name, str_addr);
@@ -611,7 +612,7 @@ PJ_DEF(pj_status_t) pjsip_transport_send(  pjsip_transport *tr,
 static void transport_idle_callback(pj_timer_heap_t *timer_heap,
 				    struct pj_timer_entry *entry)
 {
-    pjsip_transport *tp = (pjsip_transport*) entry->user_data;
+    pjsip_transport *tp = entry->user_data;
     pj_assert(tp != NULL);
 
     PJ_UNUSED_ARG(timer_heap);
@@ -881,8 +882,11 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_unregister_tpfactory( pjsip_tpmgr *mgr,
  */
 PJ_DEF(pj_status_t) pjsip_tpmgr_create( pj_pool_t *pool,
 					pjsip_endpoint *endpt,
-					pjsip_rx_callback rx_cb,
-					pjsip_tx_callback tx_cb,
+					void (*rx_cb)(pjsip_endpoint*,
+						      pj_status_t,
+						      pjsip_rx_data *),
+					pj_status_t (*tx_cb)(pjsip_endpoint*,
+							     pjsip_tx_data*),
 					pjsip_tpmgr **p_mgr)
 {
     pjsip_tpmgr *mgr;
@@ -896,7 +900,7 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_create( pj_pool_t *pool,
 	return status;
 
     /* Create and initialize transport manager. */
-    mgr = PJ_POOL_ZALLOC_T(pool, pjsip_tpmgr);
+    mgr = pj_pool_zalloc(pool, sizeof(*mgr));
     mgr->endpt = endpt;
     mgr->on_rx_msg = rx_cb;
     mgr->on_tx_msg = tx_cb;
@@ -1006,28 +1010,6 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_find_local_addr( pjsip_tpmgr *tpmgr,
     return PJ_SUCCESS;
 }
 
-/*
- * Return number of transports currently registered to the transport
- * manager.
- */
-PJ_DEF(unsigned) pjsip_tpmgr_get_transport_count(pjsip_tpmgr *mgr)
-{
-    pj_hash_iterator_t itr_val;
-    pj_hash_iterator_t *itr;
-    int nr_of_transports = 0;
-    
-    pj_lock_acquire(mgr->lock);
-    
-    itr = pj_hash_first(mgr->table, &itr_val);
-    while (itr) {
-	nr_of_transports++;
-	itr = pj_hash_next(mgr->table, itr);
-    }
-    
-    pj_lock_release(mgr->lock);
-
-    return nr_of_transports;
-}
 
 /*
  * pjsip_tpmgr_destroy()
@@ -1053,7 +1035,7 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_destroy( pjsip_tpmgr *mgr )
 	pj_hash_iterator_t *next;
 	pjsip_transport *transport;
 	
-	transport = (pjsip_transport*) pj_hash_this(mgr->table, itr);
+	transport = pj_hash_this(mgr->table, itr);
 
 	next = pj_hash_next(mgr->table, itr);
 
@@ -1361,8 +1343,7 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_acquire_transport(pjsip_tpmgr *mgr,
 	key.type = type;
 	pj_memcpy(&key.addr, remote, addr_len);
 
-	transport = (pjsip_transport*)
-		    pj_hash_get(mgr->table, &key, key_len, NULL);
+	transport = pj_hash_get(mgr->table, &key, key_len, NULL);
 	if (transport == NULL) {
 	    unsigned flag = pjsip_transport_get_flag_from_type(type);
 	    const pj_sockaddr *remote_addr = (const pj_sockaddr*)remote;
@@ -1375,13 +1356,12 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_acquire_transport(pjsip_tpmgr *mgr,
 
 		pj_bzero(addr, sizeof(pj_sockaddr_in));
 		key_len = sizeof(key.type) + sizeof(pj_sockaddr_in);
-		transport = (pjsip_transport*) 
-			    pj_hash_get(mgr->table, &key, key_len, NULL);
+		transport = pj_hash_get(mgr->table, &key, key_len, NULL);
 	    }
 	    /* For datagram INET transports, try lookup with zero address.
 	     */
 	    else if ((flag & PJSIP_TRANSPORT_DATAGRAM) && 
-		     (remote_addr->addr.sa_family == PJ_AF_INET)) 
+		     (remote_addr->sa_family == PJ_AF_INET)) 
 	    {
 		pj_sockaddr_in *addr = (pj_sockaddr_in*)&key.addr;
 
@@ -1389,8 +1369,7 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_acquire_transport(pjsip_tpmgr *mgr,
 		addr->sin_family = PJ_AF_INET;
 
 		key_len = sizeof(key.type) + sizeof(pj_sockaddr_in);
-		transport = (pjsip_transport*)
-			    pj_hash_get(mgr->table, &key, key_len, NULL);
+		transport = pj_hash_get(mgr->table, &key, key_len, NULL);
 	    }
 	}
 
@@ -1431,8 +1410,7 @@ PJ_DEF(pj_status_t) pjsip_tpmgr_acquire_transport(pjsip_tpmgr *mgr,
 
     /* Request factory to create transport. */
     status = factory->create_transport(factory, mgr, mgr->endpt,
-				       (const pj_sockaddr*) remote, addr_len,
-				       tp);
+				       remote, addr_len, tp);
     if (status == PJ_SUCCESS) {
 	PJ_ASSERT_ON_FAIL(tp!=NULL, 
 	    {pj_lock_release(mgr->lock); return PJ_EBUG;});
@@ -1476,8 +1454,7 @@ PJ_DEF(void) pjsip_tpmgr_dump_transports(pjsip_tpmgr *mgr)
 	PJ_LOG(3, (THIS_FILE, " Dumping transports:"));
 
 	do {
-	    pjsip_transport *t = (pjsip_transport*) 
-	    			 pj_hash_this(mgr->table, itr);
+	    pjsip_transport *t = pj_hash_this(mgr->table, itr);
 
 	    PJ_LOG(3, (THIS_FILE, "  %s %s (refcnt=%d%s)", 
 		       t->obj_name,

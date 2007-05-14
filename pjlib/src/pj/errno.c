@@ -18,17 +18,13 @@
  */
 #include <pj/errno.h>
 #include <pj/string.h>
-#include <pj/compat/string.h>
 #include <pj/assert.h>
 
 /* Prototype for platform specific error message, which will be defined 
  * in separate file.
  */
-PJ_BEGIN_DECL
-
-    PJ_DECL(int) platform_strerror(pj_os_err_type code, 
-                              	   char *buf, pj_size_t bufsize );
-PJ_END_DECL
+extern int platform_strerror( pj_os_err_type code, 
+                              char *buf, pj_size_t bufsize );
 
 #define PJLIB_MAX_ERR_MSG_HANDLER   8
 
@@ -103,7 +99,8 @@ static int pjlib_error(pj_status_t code, char *buf, pj_size_t size)
 /* Register strerror handle. */
 PJ_DECL(pj_status_t) pj_register_strerror(pj_status_t start,
 					  pj_status_t space,
-					  pjsip_error_callback f)
+					  pj_str_t (*f)(pj_status_t,char*,
+							pj_size_t))
 {
     unsigned i;
 
@@ -155,10 +152,7 @@ PJ_DEF(pj_str_t) pj_strerror( pj_status_t statcode,
 
     pj_assert(buf && bufsize);
 
-    if (statcode == PJ_SUCCESS) {
-	len = pj_ansi_snprintf( buf, bufsize, "Success");
-
-    } else if (statcode < PJ_ERRNO_START + PJ_ERRNO_SPACE_SIZE) {
+    if (statcode < PJ_ERRNO_START + PJ_ERRNO_SPACE_SIZE) {
         len = pj_ansi_snprintf( buf, bufsize, "Unknown error %d", statcode);
 
     } else if (statcode < PJ_ERRNO_START_STATUS + PJ_ERRNO_SPACE_SIZE) {

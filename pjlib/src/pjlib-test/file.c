@@ -125,7 +125,7 @@ static int file_test_internal(void)
     }
 
     size = 0;
-    while (size < (pj_ssize_t)sizeof(readbuf)) {
+    while (size < sizeof(readbuf)) {
         pj_ssize_t read;
         read = 1;
         status = pj_file_read(fd, &readbuf[size], &read);

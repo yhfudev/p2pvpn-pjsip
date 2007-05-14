@@ -57,12 +57,12 @@ static struct pjsip_module mod_presence =
 /*
  * Presence message body type.
  */
-typedef enum content_type_e
+typedef enum content_type
 {
     CONTENT_TYPE_NONE,
     CONTENT_TYPE_PIDF,
     CONTENT_TYPE_XPIDF,
-} content_type_e;
+} content_type;
 
 /*
  * This structure describe a presentity, for both subscriber and notifier.
@@ -71,7 +71,7 @@ struct pjsip_pres
 {
     pjsip_evsub		*sub;		/**< Event subscribtion record.	    */
     pjsip_dialog	*dlg;		/**< The dialog.		    */
-    content_type_e	 content_type;	/**< Content-Type.		    */
+    content_type	 content_type;	/**< Content-Type.		    */
     pjsip_pres_status	 status;	/**< Presence status.		    */
     pjsip_pres_status	 tmp_status;	/**< Temp, before NOTIFY is answred.*/
     pjsip_evsub_user	 user_cb;	/**< The user callback.		    */
@@ -197,7 +197,7 @@ PJ_DEF(pj_status_t) pjsip_pres_create_uac( pjsip_dialog *dlg,
 	goto on_return;
 
     /* Create presence */
-    pres = PJ_POOL_ZALLOC_T(dlg->pool, pjsip_pres);
+    pres = pj_pool_zalloc(dlg->pool, sizeof(pjsip_pres));
     pres->dlg = dlg;
     pres->sub = sub;
     if (user_cb)
@@ -226,7 +226,7 @@ PJ_DEF(pj_status_t) pjsip_pres_create_uas( pjsip_dialog *dlg,
     pjsip_event_hdr *event;
     pjsip_expires_hdr *expires_hdr;
     unsigned expires;
-    content_type_e content_type = CONTENT_TYPE_NONE;
+    content_type content_type = CONTENT_TYPE_NONE;
     pjsip_evsub *sub;
     pjsip_pres *pres;
     pj_status_t status;
@@ -244,8 +244,7 @@ PJ_DEF(pj_status_t) pjsip_pres_create_uas( pjsip_dialog *dlg,
 		     PJSIP_SIMPLE_ENOTSUBSCRIBE);
 
     /* Check that Event header contains "presence" */
-    event = (pjsip_event_hdr*)
-    	    pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &STR_EVENT, NULL);
+    event = pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &STR_EVENT, NULL);
     if (!event) {
 	return PJSIP_ERRNO_FROM_SIP_STATUS(PJSIP_SC_BAD_REQUEST);
     }
@@ -254,8 +253,7 @@ PJ_DEF(pj_status_t) pjsip_pres_create_uas( pjsip_dialog *dlg,
     }
 
     /* Check that request contains compatible Accept header. */
-    accept = (pjsip_accept_hdr*)
-    	     pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_ACCEPT, NULL);
+    accept = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_ACCEPT, NULL);
     if (accept) {
 	unsigned i;
 	for (i=0; i<accept->count; ++i) {
@@ -282,8 +280,7 @@ PJ_DEF(pj_status_t) pjsip_pres_create_uas( pjsip_dialog *dlg,
     }
 
     /* Check that expires is not too short. */
-    expires_hdr=(pjsip_expires_hdr*)
-    		pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_EXPIRES, NULL);
+    expires_hdr=pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_EXPIRES, NULL);
     if (expires_hdr) {
 	if (expires_hdr->ivalue < 5) {
 	    return PJSIP_ERRNO_FROM_SIP_STATUS(PJSIP_SC_INTERVAL_TOO_BRIEF);
@@ -307,7 +304,7 @@ PJ_DEF(pj_status_t) pjsip_pres_create_uas( pjsip_dialog *dlg,
 	goto on_return;
 
     /* Create server presence subscription */
-    pres = PJ_POOL_ZALLOC_T(dlg->pool, pjsip_pres);
+    pres = pj_pool_zalloc(dlg->pool, sizeof(pjsip_pres));
     pres->dlg = dlg;
     pres->sub = sub;
     pres->content_type = content_type;
@@ -369,7 +366,7 @@ PJ_DEF(pj_status_t) pjsip_pres_get_status( pjsip_evsub *sub,
 
     PJ_ASSERT_RETURN(sub && status, PJ_EINVAL);
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_RETURN(pres!=NULL, PJSIP_SIMPLE_ENOPRESENCE);
 
     if (pres->tmp_status._is_valid)
@@ -392,7 +389,7 @@ PJ_DEF(pj_status_t) pjsip_pres_set_status( pjsip_evsub *sub,
 
     PJ_ASSERT_RETURN(sub && status, PJ_EINVAL);
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_RETURN(pres!=NULL, PJSIP_SIMPLE_ENOPRESENCE);
 
     for (i=0; i<status->info_cnt; ++i) {
@@ -425,7 +422,7 @@ static pj_status_t pres_create_msg_body( pjsip_pres *pres,
     pj_str_t entity;
 
     /* Get publisher URI */
-    entity.ptr = (char*) pj_pool_alloc(tdata->pool, PJSIP_MAX_URL_SIZE);
+    entity.ptr = pj_pool_alloc(tdata->pool, PJSIP_MAX_URL_SIZE);
     entity.slen = pjsip_uri_print(PJSIP_URI_IN_REQ_URI,
 				  pres->dlg->local.info->uri,
 				  entity.ptr, PJSIP_MAX_URL_SIZE);
@@ -465,7 +462,7 @@ PJ_DEF(pj_status_t) pjsip_pres_notify( pjsip_evsub *sub,
     PJ_ASSERT_RETURN(sub, PJ_EINVAL);
 
     /* Get the presence object. */
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_RETURN(pres != NULL, PJSIP_SIMPLE_ENOPRESENCE);
 
     /* Must have at least one presence info. */
@@ -511,7 +508,7 @@ PJ_DEF(pj_status_t) pjsip_pres_current_notify( pjsip_evsub *sub,
     PJ_ASSERT_RETURN(sub, PJ_EINVAL);
 
     /* Get the presence object. */
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_RETURN(pres != NULL, PJSIP_SIMPLE_ENOPRESENCE);
 
     /* Must have at least one presence info. */
@@ -561,7 +558,7 @@ static void pres_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 {
     pjsip_pres *pres;
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_ON_FAIL(pres!=NULL, {return;});
 
     if (pres->user_cb.on_evsub_state)
@@ -576,7 +573,7 @@ static void pres_on_evsub_tsx_state( pjsip_evsub *sub, pjsip_transaction *tsx,
 {
     pjsip_pres *pres;
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_ON_FAIL(pres!=NULL, {return;});
 
     if (pres->user_cb.on_tsx_state)
@@ -596,7 +593,7 @@ static void pres_on_evsub_rx_refresh( pjsip_evsub *sub,
 {
     pjsip_pres *pres;
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_ON_FAIL(pres!=NULL, {return;});
 
     if (pres->user_cb.on_rx_refresh) {
@@ -724,7 +721,7 @@ static void pres_on_evsub_rx_notify( pjsip_evsub *sub,
     pjsip_pres *pres;
     pj_status_t status;
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_ON_FAIL(pres!=NULL, {return;});
 
     if (rdata->msg_info.msg->body) {
@@ -776,7 +773,7 @@ static void pres_on_evsub_client_refresh(pjsip_evsub *sub)
 {
     pjsip_pres *pres;
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_ON_FAIL(pres!=NULL, {return;});
 
     if (pres->user_cb.on_client_refresh) {
@@ -798,7 +795,7 @@ static void pres_on_evsub_server_timeout(pjsip_evsub *sub)
 {
     pjsip_pres *pres;
 
-    pres = (pjsip_pres*) pjsip_evsub_get_mod_data(sub, mod_presence.id);
+    pres = pjsip_evsub_get_mod_data(sub, mod_presence.id);
     PJ_ASSERT_ON_FAIL(pres!=NULL, {return;});
 
     if (pres->user_cb.on_server_timeout) {

@@ -153,7 +153,7 @@ static void pool_callback( pj_pool_t *pool, pj_size_t size )
 /* Compare module name, used for searching module based on name. */
 static int cmp_mod_name(void *name, const void *mod)
 {
-    return pj_stricmp((const pj_str_t*)name, &((pjsip_module*)mod)->name);
+    return pj_stricmp(name, &((pjsip_module*)mod)->name);
 }
 
 /*
@@ -167,7 +167,7 @@ PJ_DEF(pj_status_t) pjsip_endpt_register_module( pjsip_endpoint *endpt,
 {
     pj_status_t status = PJ_SUCCESS;
     pjsip_module *m;
-    unsigned i;
+    int i;
 
     pj_rwmutex_lock_write(endpt->mod_mutex);
 
@@ -247,8 +247,7 @@ PJ_DEF(pj_status_t) pjsip_endpt_unregister_module( pjsip_endpoint *endpt,
 			{status = PJ_ENOTFOUND;goto on_return;} );
 
     /* Make sure the module exists in the array. */
-    PJ_ASSERT_ON_FAIL(	mod->id>=0 && 
-			mod->id<(int)PJ_ARRAY_SIZE(endpt->modules) &&
+    PJ_ASSERT_ON_FAIL(	mod->id>=0 && mod->id<PJ_ARRAY_SIZE(endpt->modules) &&
 			endpt->modules[mod->id] == mod,
 			{status = PJ_ENOTFOUND; goto on_return;});
 
@@ -446,7 +445,7 @@ PJ_DEF(pj_status_t) pjsip_endpt_create(pj_pool_factory *pf,
 	return PJ_ENOMEM;
 
     /* Create endpoint. */
-    endpt = PJ_POOL_ZALLOC_T(pool, pjsip_endpoint);
+    endpt = pj_pool_zalloc(pool, sizeof(*endpt));
     endpt->pool = pool;
     endpt->pf = pf;
 
@@ -759,14 +758,6 @@ PJ_DEF(void) pjsip_endpt_cancel_timer( pjsip_endpoint *endpt,
 }
 
 /*
- * Get the timer heap instance of the SIP endpoint.
- */
-PJ_DEF(pj_timer_heap_t*) pjsip_endpt_get_timer_heap(pjsip_endpoint *endpt)
-{
-    return endpt->timer_heap;
-}
-
-/*
  * This is the callback that is called by the transport manager when it 
  * receives a message from the network.
  */
@@ -829,7 +820,7 @@ static void endpt_on_rx_msg( pjsip_endpoint *endpt,
 	int port = rdata->msg_info.via->sent_by.port;
 	pj_bool_t mismatch = PJ_FALSE;
 	if (port == 0) {
-	    pjsip_transport_type_e type;
+	    int type;
 	    type = rdata->tp_info.transport->key.type;
 	    port = pjsip_transport_get_default_port_for_type(type);
 	}
@@ -1080,7 +1071,7 @@ PJ_DEF(void) pjsip_endpt_log_error(  pjsip_endpoint *endpt,
     PJ_UNUSED_ARG(endpt);
 
     len = pj_ansi_strlen(format);
-    if (len < (int)sizeof(newformat)-30) {
+    if (len < sizeof(newformat)-30) {
 	pj_str_t errstr;
 
 	pj_ansi_strcpy(newformat, format);

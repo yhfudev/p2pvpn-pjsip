@@ -4,7 +4,6 @@
 	Version="8.00"
 	Name="pjlib_util"
 	ProjectGUID="{FE07F272-AE7F-4549-9E9F-EF9B80CB1693}"
-	RootNamespace="pjlib_util"
 	>
 	<Platforms>
 		<Platform
@@ -176,28 +175,6 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
-				RelativePath="..\src\pjlib-util\crc32.c"
-				>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-			</File>
-			<File
 				RelativePath="..\src\pjlib-util\dns.c"
 				>
 				<FileConfiguration
@@ -265,50 +242,6 @@
 			</File>
 			<File
 				RelativePath="..\src\pjlib-util\getopt.c"
-				>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\hmac_md5.c"
-				>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\hmac_sha1.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -444,32 +377,6 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjlib-util\sha1.c"
-				>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pjlib-util\srv_resolver.c"
-				>
-			</File>
-			<File
 				RelativePath="..\src\pjlib-util\string.c"
 				>
 				<FileConfiguration
@@ -492,7 +399,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjlib-util\stun_simple.c"
+				RelativePath="..\src\pjlib-util\stun.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -514,7 +421,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\pjlib-util\stun_simple_client.c"
+				RelativePath="..\src\pjlib-util\stun_client.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -589,10 +496,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjlib-util\crc32.h"
-				>
-			</File>
-			<File
 				RelativePath="..\include\pjlib-util\dns.h"
 				>
 			</File>
@@ -602,14 +505,6 @@
 			</File>
 			<File
 				RelativePath="..\include\pjlib-util\getopt.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\hmac_md5.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\hmac_sha1.h"
 				>
 			</File>
 			<File
@@ -637,19 +532,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjlib-util\sha1.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjlib-util\srv_resolver.h"
-				>
-			</File>
-			<File
 				RelativePath="..\include\pjlib-util\string.h"
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjlib-util\stun_simple.h"
+				RelativePath="..\include\pjlib-util\stun.h"
 				>
 			</File>
 			<File

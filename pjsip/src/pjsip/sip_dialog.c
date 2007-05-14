@@ -69,7 +69,7 @@ static pj_status_t create_dialog( pjsip_user_agent *ua,
     if (!pool)
 	return PJ_ENOMEM;
 
-    dlg = PJ_POOL_ZALLOC_T(pool, pjsip_dialog);
+    dlg = pj_pool_zalloc(pool, sizeof(pjsip_dialog));
     PJ_ASSERT_RETURN(dlg != NULL, PJ_ENOMEM);
 
     dlg->pool = pool;
@@ -154,8 +154,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uac( pjsip_user_agent *ua,
 	    c = param->value.ptr[param->value.slen];
 	    param->value.ptr[param->value.slen] = '\0';
 
-	    hdr = (pjsip_hdr*)
-	    	  pjsip_parse_hdr(dlg->pool, &param->name, param->value.ptr,
+	    hdr = pjsip_parse_hdr(dlg->pool, &param->name, param->value.ptr,
 				  param->value.slen, NULL);
 
 	    param->value.ptr[param->value.slen] = (char)c;
@@ -223,8 +222,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uac( pjsip_user_agent *ua,
     if (PJSIP_URI_SCHEME_IS_SIP(dlg->remote.info->uri) ||
 	PJSIP_URI_SCHEME_IS_SIPS(dlg->remote.info->uri))
     {
-	pjsip_sip_uri *sip_uri = (pjsip_sip_uri *) 
-				 pjsip_uri_get_uri(dlg->remote.info->uri);
+	pjsip_sip_uri *sip_uri = pjsip_uri_get_uri(dlg->remote.info->uri);
 	if (!pj_list_empty(&sip_uri->header_param)) {
 	    pj_str_t tmp;
 
@@ -232,8 +230,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uac( pjsip_user_agent *ua,
 	    pj_list_init(&sip_uri->header_param);
 
 	    /* Print URI */
-	    tmp.ptr = (char*) pj_pool_alloc(dlg->pool, 
-	    				    dlg->remote.info_str.slen);
+	    tmp.ptr = pj_pool_alloc(dlg->pool, dlg->remote.info_str.slen);
 	    tmp.slen = pjsip_uri_print(PJSIP_URI_IN_FROMTO_HDR,
 				       sip_uri, tmp.ptr, 
 				       dlg->remote.info_str.slen);
@@ -333,11 +330,10 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uas(   pjsip_user_agent *ua,
     /* Temprary string for getting the string representation of
      * both local and remote URI.
      */
-    tmp.ptr = (char*) pj_pool_alloc(rdata->tp_info.pool, TMP_LEN);
+    tmp.ptr = pj_pool_alloc(rdata->tp_info.pool, TMP_LEN);
 
     /* Init local info from the To header. */
-    dlg->local.info = (pjsip_fromto_hdr*)
-    		      pjsip_hdr_clone(dlg->pool, rdata->msg_info.to);
+    dlg->local.info = pjsip_hdr_clone(dlg->pool, rdata->msg_info.to);
     pjsip_fromto_hdr_set_from(dlg->local.info);
 
     /* Generate local tag. */
@@ -392,8 +388,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uas(   pjsip_user_agent *ua,
     }
 
     /* Init remote info from the From header. */
-    dlg->remote.info = (pjsip_fromto_hdr*) 
-    		       pjsip_hdr_clone(dlg->pool, rdata->msg_info.from);
+    dlg->remote.info = pjsip_hdr_clone(dlg->pool, rdata->msg_info.from);
     pjsip_fromto_hdr_set_to(dlg->remote.info);
 
     /* Print the remote info. */
@@ -410,15 +405,13 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uas(   pjsip_user_agent *ua,
 
 
     /* Init remote's contact from Contact header. */
-    contact_hdr = (pjsip_hdr*)
-    		  pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT, 
+    contact_hdr = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT, 
 				     NULL);
     if (!contact_hdr) {
 	status = PJSIP_ERRNO_FROM_SIP_STATUS(PJSIP_SC_BAD_REQUEST);
 	goto on_error;
     }
-    dlg->remote.contact = (pjsip_contact_hdr*) 
-    			  pjsip_hdr_clone(dlg->pool, contact_hdr);
+    dlg->remote.contact = pjsip_hdr_clone(dlg->pool, contact_hdr);
 
     /* Init remote's CSeq from CSeq header */
     dlg->remote.cseq = dlg->remote.first_cseq = rdata->msg_info.cseq->cseq;
@@ -438,8 +431,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uas(   pjsip_user_agent *ua,
 		  PJSIP_URI_SCHEME_IS_SIPS(rdata->msg_info.msg->line.req.uri);
 
     /* Call-ID */
-    dlg->call_id = (pjsip_cid_hdr*) 
-    		   pjsip_hdr_clone(dlg->pool, rdata->msg_info.cid);
+    dlg->call_id = pjsip_hdr_clone(dlg->pool, rdata->msg_info.cid);
 
     /* Route set. 
      *  RFC 3261 Section 12.1.1:
@@ -454,7 +446,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uas(   pjsip_user_agent *ua,
 	pjsip_route_hdr *route;
 
 	/* Clone the Record-Route, change the type to Route header. */
-	route = (pjsip_route_hdr*) pjsip_hdr_clone(dlg->pool, rr);
+	route = pjsip_hdr_clone(dlg->pool, rr);
 	pjsip_routing_hdr_set_route(route);
 
 	/* Add to route set. */
@@ -464,8 +456,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_create_uas(   pjsip_user_agent *ua,
 	rr = rr->next;
 	if (rr == (void*)&rdata->msg_info.msg->hdr)
 	    break;
-	rr = (pjsip_route_hdr*) pjsip_msg_find_hdr(rdata->msg_info.msg, 
-						   PJSIP_H_RECORD_ROUTE, rr);
+	rr = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_RECORD_ROUTE, rr);
     }
 
     /* Init client authentication session. */
@@ -578,11 +569,10 @@ PJ_DEF(pj_status_t) pjsip_dlg_fork( const pjsip_dialog *first_dlg,
 	return status;
 
     /* Clone remote target. */
-    dlg->target = (pjsip_uri*) pjsip_uri_clone(dlg->pool, first_dlg->target);
+    dlg->target = pjsip_uri_clone(dlg->pool, first_dlg->target);
 
     /* Clone local info. */
-    dlg->local.info = (pjsip_fromto_hdr*) 
-    		      pjsip_hdr_clone(dlg->pool, first_dlg->local.info);
+    dlg->local.info = pjsip_hdr_clone(dlg->pool, first_dlg->local.info);
 
     /* Clone local tag. */
     pj_strdup(dlg->pool, &dlg->local.info->tag, &first_dlg->local.info->tag);
@@ -593,12 +583,10 @@ PJ_DEF(pj_status_t) pjsip_dlg_fork( const pjsip_dialog *first_dlg,
     dlg->local.cseq = first_dlg->local.cseq;
 
     /* Clone local Contact. */
-    dlg->local.contact = (pjsip_contact_hdr*) 
-    			 pjsip_hdr_clone(dlg->pool, first_dlg->local.contact);
+    dlg->local.contact = pjsip_hdr_clone(dlg->pool, first_dlg->local.contact);
 
     /* Clone remote info. */
-    dlg->remote.info = (pjsip_fromto_hdr*) 
-    		       pjsip_hdr_clone(dlg->pool, first_dlg->remote.info);
+    dlg->remote.info = pjsip_hdr_clone(dlg->pool, first_dlg->remote.info);
 
     /* Set remote tag from the response. */
     pj_strdup(dlg->pool, &dlg->remote.info->tag, &rdata->msg_info.to->tag);
@@ -622,8 +610,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_fork( const pjsip_dialog *first_dlg,
     dlg->secure = PJSIP_URI_SCHEME_IS_SIPS(dlg->target);
 
     /* Clone Call-ID header. */
-    dlg->call_id = (pjsip_cid_hdr*) 
-    		   pjsip_hdr_clone(dlg->pool, first_dlg->call_id);
+    dlg->call_id = pjsip_hdr_clone(dlg->pool, first_dlg->call_id);
 
     /* Duplicate Route-Set. */
     pj_list_init(&dlg->route_set);
@@ -631,7 +618,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_fork( const pjsip_dialog *first_dlg,
     while (r != &first_dlg->route_set) {
 	pjsip_route_hdr *h;
 
-	h = (pjsip_route_hdr*) pjsip_hdr_clone(dlg->pool, r);
+	h = pjsip_hdr_clone(dlg->pool, r);
 	pj_list_push_back(&dlg->route_set, h);
 
 	r = r->next;
@@ -733,7 +720,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_set_route_set( pjsip_dialog *dlg,
     while (r != route_set) {
 	pjsip_route_hdr *new_r;
 
-	new_r = (pjsip_route_hdr*) pjsip_hdr_clone(dlg->pool, r);
+	new_r = pjsip_hdr_clone(dlg->pool, r);
 	pj_list_push_back(&dlg->route_set, new_r);
 
 	r = r->next;
@@ -992,7 +979,7 @@ static pj_status_t dlg_create_request_throw( pjsip_dialog *dlg,
     end_list = &dlg->route_set;
     for (; route != end_list; route = route->next ) {
 	pjsip_route_hdr *r;
-	r = (pjsip_route_hdr*) pjsip_hdr_shallow_clone( tdata->pool, route );
+	r = pjsip_hdr_shallow_clone( tdata->pool, route );
 	pjsip_routing_hdr_set_route(r);
 	pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)r);
     }
@@ -1189,8 +1176,7 @@ static void dlg_beautify_response(pjsip_dialog *dlg,
 	    if (pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CONTACT, NULL) == 0 &&
 		pjsip_msg_find_hdr_by_name(tdata->msg, &hcontact, NULL) == 0) 
 	    {
-		hdr = (pjsip_hdr*) pjsip_hdr_clone(tdata->pool, 
-						   dlg->local.contact);
+		hdr = pjsip_hdr_clone(tdata->pool, dlg->local.contact);
 		pjsip_msg_add_hdr(tdata->msg, hdr);
 	    }
 	}
@@ -1202,7 +1188,7 @@ static void dlg_beautify_response(pjsip_dialog *dlg,
 	    c_hdr = pjsip_endpt_get_capability(dlg->endpt,
 					       PJSIP_H_ALLOW, NULL);
 	    if (c_hdr) {
-		hdr = (pjsip_hdr*) pjsip_hdr_clone(tdata->pool, c_hdr);
+		hdr = pjsip_hdr_clone(tdata->pool, c_hdr);
 		pjsip_msg_add_hdr(tdata->msg, hdr);
 	    }
 	}
@@ -1214,7 +1200,7 @@ static void dlg_beautify_response(pjsip_dialog *dlg,
 	    c_hdr = pjsip_endpt_get_capability(dlg->endpt,
 					       PJSIP_H_SUPPORTED, NULL);
 	    if (c_hdr) {
-		hdr = (pjsip_hdr*) pjsip_hdr_clone(tdata->pool, c_hdr);
+		hdr = pjsip_hdr_clone(tdata->pool, c_hdr);
 		pjsip_msg_add_hdr(tdata->msg, hdr);
 	    }
 	}
@@ -1299,7 +1285,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_modify_response(	pjsip_dialog *dlg,
     /* Remove existing Contact header (without this, when dialog sent 
      * 180 and then 302, the Contact in 302 will not get updated).
      */
-    hdr = (pjsip_hdr*) pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CONTACT, NULL);
+    hdr = pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CONTACT, NULL);
     if (hdr)
 	pj_list_erase(hdr);
 
@@ -1412,7 +1398,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_respond(  pjsip_dialog *dlg,
 	hdr = hdr_list->next;
 	while (hdr != hdr_list) {
 	    pjsip_msg_add_hdr(tdata->msg,
-			      (pjsip_hdr*)pjsip_hdr_clone(tdata->pool, hdr));
+			      pjsip_hdr_clone(tdata->pool, hdr));
 	    hdr = hdr->next;
 	}
     }
@@ -1540,7 +1526,7 @@ static void dlg_update_routeset(pjsip_dialog *dlg, const pjsip_msg *msg)
     for (hdr=msg->hdr.prev; hdr!=end_hdr; hdr=hdr->prev) {
 	if (hdr->type == PJSIP_H_RECORD_ROUTE) {
 	    pjsip_route_hdr *r;
-	    r = (pjsip_route_hdr*) pjsip_hdr_clone(dlg->pool, hdr);
+	    r = pjsip_hdr_clone(dlg->pool, hdr);
 	    pjsip_routing_hdr_set_route(r);
 	    pj_list_push_back(&dlg->route_set, r);
 	}
@@ -1570,26 +1556,26 @@ void pjsip_dlg_on_rx_response( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 
     /* When we receive response that establishes dialog, update To tag, 
      * route set and dialog target.
-     *
-     * The second condition of the "if" is a workaround for forking.
-     * Originally, the dialog takes the first To tag seen and set it as
-     * the remote tag. If the tag in 2xx response is different than this
-     * tag, ACK will be sent with wrong To tag and incoming request with
-     * this tag will be rejected with 481.
-     *
-     * The workaround for this is to take the To tag received in the
-     * 2xx response and set it as remote tag.
-     */
-    if ((dlg->state == PJSIP_DIALOG_STATE_NULL && 
-	 pjsip_method_creates_dialog(&rdata->msg_info.cseq->method) &&
-	 (res_code > 100 && res_code < 300) &&
-	 rdata->msg_info.to->tag.slen) 
-	 ||
-	(dlg->role==PJSIP_ROLE_UAC &&
-	 !dlg->uac_has_2xx &&
-	 res_code/100 == 2 &&
-	 pjsip_method_creates_dialog(&rdata->msg_info.cseq->method) &&
-	 pj_strcmp(&dlg->remote.info->tag, &rdata->msg_info.to->tag)))
+     * 
+     * The second condition of the "if" is a workaround for forking. 
+     * Originally, the dialog takes the first To tag seen and set it as 
+     * the remote tag. If the tag in 2xx response is different than this 
+     * tag, ACK will be sent with wrong To tag and incoming request with 
+     * this tag will be rejected with 481. 
+     * 
+     * The workaround for this is to take the To tag received in the 
+     * 2xx response and set it as remote tag. 
+     */ 
+    if ((dlg->state == PJSIP_DIALOG_STATE_NULL &&  
+         pjsip_method_creates_dialog(&rdata->msg_info.cseq->method) && 
+ 	 (res_code > 100 && res_code < 300) && 
+ 	 rdata->msg_info.to->tag.slen)  
+ 	|| 
+ 	(dlg->role==PJSIP_ROLE_UAC && 
+ 	 !dlg->uac_has_2xx && 
+ 	 res_code/100 == 2 && 
+ 	 pjsip_method_creates_dialog(&rdata->msg_info.cseq->method) && 
+ 	 pj_strcmp(&dlg->remote.info->tag, &rdata->msg_info.to->tag)))
     {
 	pjsip_contact_hdr *contact;
 
@@ -1612,25 +1598,24 @@ void pjsip_dlg_on_rx_response( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 	/* The remote target MUST be set to the URI from the Contact header 
 	 * field of the response.
 	 */
-	contact = (pjsip_contact_hdr*)
-		  pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT, 
+	contact = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT, 
 				     NULL);
 	if (contact) {
-	    dlg->remote.contact = (pjsip_contact_hdr*) 
-	    			  pjsip_hdr_clone(dlg->pool, contact);
+	    dlg->remote.contact = pjsip_hdr_clone(dlg->pool, contact);
 	    dlg->target = dlg->remote.contact->uri;
 	}
 
 	dlg->state = PJSIP_DIALOG_STATE_ESTABLISHED;
 
-	/* Prevent dialog from being updated just in case more 2xx
-	 * gets through this dialog (it shouldn't happen).
-	 */
-	if (dlg->role==PJSIP_ROLE_UAC && !dlg->uac_has_2xx && 
-	    res_code/100==2) 
-	{
-	    dlg->uac_has_2xx = PJ_TRUE;
-	}
+ 
+ 	/* Prevent dialog from being updated just in case more 2xx 
+ 	 * gets through this dialog (it shouldn't happen). 
+ 	 */ 
+ 	if (dlg->role==PJSIP_ROLE_UAC && !dlg->uac_has_2xx &&  
+ 	    res_code/100==2)  
+ 	{ 
+ 	    dlg->uac_has_2xx = PJ_TRUE; 
+ 	} 
     }
 
     /* Update remote target (again) when receiving 2xx response messages
@@ -1658,12 +1643,10 @@ void pjsip_dlg_on_rx_response( pjsip_dialog *dlg, pjsip_rx_data *rdata )
     {
 	pjsip_contact_hdr *contact;
 
-	contact = (pjsip_contact_hdr*) pjsip_msg_find_hdr(rdata->msg_info.msg,
-							  PJSIP_H_CONTACT, 
-				     			  NULL);
+	contact = pjsip_msg_find_hdr(rdata->msg_info.msg, PJSIP_H_CONTACT, 
+				     NULL);
 	if (contact) {
-	    dlg->remote.contact = (pjsip_contact_hdr*) 
-	    			  pjsip_hdr_clone(dlg->pool, contact);
+	    dlg->remote.contact = pjsip_hdr_clone(dlg->pool, contact);
 	    dlg->target = dlg->remote.contact->uri;
 	}
 

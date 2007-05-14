@@ -250,7 +250,7 @@ void pjsip_concat_param_imp( pj_str_t *param, pj_pool_t *pool,
     int len;
 
     len = param->slen + pname->slen + pvalue->slen + 3;
-    p = new_param = (char*) pj_pool_alloc(pool, len);
+    p = new_param = pj_pool_alloc(pool, len);
     
     if (param->slen) {
 	int old_len = param->slen;
@@ -908,7 +908,6 @@ static pjsip_msg *int_parse_msg( pjsip_parse_ctx *ctx,
 
     parsing_headers = PJ_FALSE;
 
-retry_parse:
     PJ_TRY 
     {
 	if (parsing_headers)
@@ -1002,7 +1001,7 @@ parse_headers:
 	 * as body.
 	 */
 	if (ctype_hdr && scanner->curptr!=scanner->end) {
-	    pjsip_msg_body *body = PJ_POOL_ALLOC_T(pool, pjsip_msg_body);
+	    pjsip_msg_body *body = pj_pool_alloc(pool, sizeof(pjsip_msg_body));
 	    body->content_type.type = ctype_hdr->media.type;
 	    body->content_type.subtype = ctype_hdr->media.subtype;
 	    body->content_type.param = ctype_hdr->media.param;
@@ -1023,7 +1022,7 @@ parse_headers:
 	if (err_list) {
 	    pjsip_parser_err_report *err_info;
 	    
-	    err_info = PJ_POOL_ALLOC_T(pool, pjsip_parser_err_report);
+	    err_info = pj_pool_alloc(pool, sizeof(*err_info));
 	    err_info->except_code = PJ_GET_EXCEPTION();
 	    err_info->line = scanner->line;
 	    /* Scanner's column is zero based, so add 1 */
@@ -1055,7 +1054,7 @@ parse_headers:
 
 	    /* Continue parse next header, if any. */
 	    if (!pj_scan_is_eof(scanner) && !IS_NEWLINE(*scanner->curptr)) {
-		goto retry_parse;
+		goto parse_headers;
 	    }
 	}
 
@@ -1251,9 +1250,8 @@ static pjsip_uri *int_parse_uri_or_name_addr( pj_scanner *scanner, pj_pool_t *po
 		PJ_THROW(PJSIP_SYN_ERR_EXCEPTION);
 	    }
 
-	    uri = (pjsip_uri*)
-	    	  (*func)(scanner, pool, 
-			  (opt & PJSIP_PARSE_URI_IN_FROM_TO_HDR)==0);
+	    uri = (*func)( scanner, pool, 
+			  (opt & PJSIP_PARSE_URI_IN_FROM_TO_HDR)== 0);
 
 
 	} else {
@@ -1381,7 +1379,7 @@ static void* int_parse_sip_url( pj_scanner *scanner,
 	    url->lr_param = 1;
 
 	} else {
-	    pjsip_param *p = PJ_POOL_ALLOC_T(pool, pjsip_param);
+	    pjsip_param *p = pj_pool_alloc(pool, sizeof(pjsip_param));
 	    p->name = pname;
 	    p->value = pvalue;
 	    pj_list_insert_before(&url->other_param, p);
@@ -1393,7 +1391,7 @@ static void* int_parse_sip_url( pj_scanner *scanner,
     if (parse_params && *scanner->curptr == '?') {
       do {
 	pjsip_param *param;
-	param = PJ_POOL_ALLOC_T(pool, pjsip_param);
+	param = pj_pool_alloc(pool, sizeof(pjsip_param));
 	int_parse_hparam(scanner, pool, &param->name, &param->value);
 	pj_list_insert_before(&url->header_param, param);
       } while (*scanner->curptr == '&');
@@ -1625,7 +1623,7 @@ static void int_parse_contact_param( pjsip_contact_hdr *hdr,
 
 	int_parse_param( scanner, pool, &pname, &pvalue, 0);
 	if (!parser_stricmp(pname, pjsip_Q_STR) && pvalue.slen) {
-	    char *dot_pos = (char*) pj_memchr(pvalue.ptr, '.', pvalue.slen);
+	    char *dot_pos = pj_memchr(pvalue.ptr, '.', pvalue.slen);
 	    if (!dot_pos) {
 		hdr->q1000 = pj_strtoul(&pvalue);
 	    } else {
@@ -1637,7 +1635,7 @@ static void int_parse_contact_param( pjsip_contact_hdr *hdr,
 	    hdr->expires = pj_strtoul(&pvalue);
 
 	} else {
-	    pjsip_param *p = PJ_POOL_ALLOC_T(pool, pjsip_param);
+	    pjsip_param *p = pj_pool_alloc(pool, sizeof(pjsip_param));
 	    p->name = pname;
 	    p->value = pvalue;
 	    pj_list_insert_before(&hdr->other_param, p);
@@ -1775,7 +1773,7 @@ static void parse_hdr_fromto( pj_scanner *scanner,
 	    hdr->tag = pvalue;
 	    
 	} else {
-	    pjsip_param *p = PJ_POOL_ALLOC_T(pool, pjsip_param);
+	    pjsip_param *p = pj_pool_alloc(pool, sizeof(pjsip_param));
 	    p->name = pname;
 	    p->value = pvalue;
 	    pj_list_insert_before(&hdr->other_param, p);
@@ -1873,7 +1871,7 @@ static void int_parse_via_param( pjsip_via_hdr *hdr, pj_scanner *scanner,
 	    else
 		hdr->rport_param = 0;
 	} else {
-	    pjsip_param *p = PJ_POOL_ALLOC_T(pool, pjsip_param);
+	    pjsip_param *p = pj_pool_alloc(pool, sizeof(pjsip_param));
 	    p->name = pname;
 	    p->value = pvalue;
 	    pj_list_insert_before(&hdr->other_param, p);
@@ -1913,7 +1911,7 @@ static void parse_hdr_rr_route( pj_scanner *scanner, pj_pool_t *pool,
     pj_memcpy(&hdr->name_addr, temp, sizeof(*temp));
 
     while (*scanner->curptr == ';') {
-	pjsip_param *p = PJ_POOL_ALLOC_T(pool, pjsip_param);
+	pjsip_param *p = pj_pool_alloc(pool, sizeof(pjsip_param));
 	int_parse_param(scanner, pool, &p->name, &p->value, 0);
 	pj_list_insert_before(&hdr->other_param, p);
     }

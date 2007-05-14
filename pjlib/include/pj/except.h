@@ -26,7 +26,6 @@
 
 #include <pj/types.h>
 #include <pj/compat/setjmp.h>
-#include <pj/log.h>
 
 
 PJ_BEGIN_DECL
@@ -237,45 +236,6 @@ pj_throw_exception_(pj_exception_id_t id) PJ_ATTR_NORETURN
 #define PJ_END		    
 #define PJ_THROW(id)	    pj_throw_exception_(id)
 #define PJ_GET_EXCEPTION()  GetExceptionCode()
-
-
-#elif defined(PJ_SYMBIAN) && PJ_SYMBIAN!=0
-/*****************************************************************************
- **
- ** IMPLEMENTATION OF EXCEPTION USING SYMBIAN LEAVE/TRAP FRAMEWORK
- **
- ****************************************************************************/
-
-/* To include this file, the source file must be compiled as
- * C++ code!
- */
-#ifdef __cplusplus
-
-class TPjException
-{
-public:
-    int code_;
-};
-
-#define PJ_USE_EXCEPTION
-#define PJ_TRY			try
-//#define PJ_CATCH(id)		
-#define PJ_CATCH_ANY		catch (const TPjException & pj_excp_)
-#define PJ_END
-#define PJ_THROW(x_id)		do { TPjException e; e.code_=x_id; throw e;} \
-				while (0)
-#define PJ_GET_EXCEPTION()	pj_excp_.code_
-
-#else
-
-#define PJ_USE_EXCEPTION
-#define PJ_TRY				
-#define PJ_CATCH_ANY		if (0)
-#define PJ_END
-#define PJ_THROW(x_id)		do { PJ_LOG(1,("PJ_THROW"," error code = %d",x_id)); } while (0)
-#define PJ_GET_EXCEPTION()	0
-
-#endif	/* __cplusplus */
 
 #else
 /*****************************************************************************

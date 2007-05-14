@@ -284,68 +284,19 @@
 
 /* Endpoint. */
 #define PJSIP_MAX_TIMER_COUNT		(2*PJSIP_MAX_TSX_COUNT + 2*PJSIP_MAX_DIALOG_COUNT)
-
-/**
- * Initial memory block for the endpoint.
- */
-#ifndef PJSIP_POOL_LEN_ENDPT
-#   define PJSIP_POOL_LEN_ENDPT		(4000)
-#endif
-
-/**
- * Memory increment for endpoint.
- */
-#ifndef PJSIP_POOL_INC_ENDPT
-#   define PJSIP_POOL_INC_ENDPT		(4000)
-#endif
-
+#define PJSIP_POOL_LEN_ENDPT		(4000)
+#define PJSIP_POOL_INC_ENDPT		(4000)
 
 /* Transport related constants. */
 
-/**
- * Initial memory block for rdata.
- */
-#ifndef PJSIP_POOL_RDATA_LEN
-#   define PJSIP_POOL_RDATA_LEN		4000
-#endif
-
-/**
- * Memory increment for rdata.
- */
-#ifndef PJSIP_POOL_RDATA_INC
-#   define PJSIP_POOL_RDATA_INC		4000
-#endif
-
+#define PJSIP_POOL_RDATA_LEN		4000
+#define PJSIP_POOL_RDATA_INC		4000
 #define PJSIP_POOL_LEN_TRANSPORT	512
 #define PJSIP_POOL_INC_TRANSPORT	512
-
-/**
- * Initial memory block size for tdata.
- */
-#ifndef PJSIP_POOL_LEN_TDATA
-#   define PJSIP_POOL_LEN_TDATA		4000
-#endif
-
-/**
- * Memory increment for tdata.
- */
-#ifndef PJSIP_POOL_INC_TDATA
-#   define PJSIP_POOL_INC_TDATA		4000
-#endif
-
-/**
- * Initial memory size for UA layer
- */
-#ifndef PJSIP_POOL_LEN_UA
-#   define PJSIP_POOL_LEN_UA		4000
-#endif
-
-/**
- * Memory increment for UA layer.
- */
-#ifndef PJSIP_POOL_INC_UA
-#   define PJSIP_POOL_INC_UA		4000
-#endif
+#define PJSIP_POOL_LEN_TDATA		4000
+#define PJSIP_POOL_INC_TDATA		4000
+#define PJSIP_POOL_LEN_UA		4000
+#define PJSIP_POOL_INC_UA		4000
 
 #define PJSIP_MAX_FORWARDS_VALUE	70
 
@@ -353,35 +304,10 @@
 #define PJSIP_RFC3261_BRANCH_LEN	7
 
 /* Transaction related constants. */
-
-/**
- * Initial memory size for transaction layer
- */
-#ifndef PJSIP_POOL_TSX_LAYER_LEN
-#   define PJSIP_POOL_TSX_LAYER_LEN	4000
-#endif
-
-/**
- * Memory increment for transaction layer.
- */
-#ifndef PJSIP_POOL_TSX_LAYER_INC
-#   define PJSIP_POOL_TSX_LAYER_INC	4000
-#endif
-
-/**
- * Initial memory size for a SIP transaction object.
- */
-#ifndef PJSIP_POOL_TSX_LEN
-#   define PJSIP_POOL_TSX_LEN		1536 /* 768 */
-#endif
-
-/**
- * Memory increment for transaction object.
- */
-#ifndef PJSIP_POOL_TSX_INC
-#   define PJSIP_POOL_TSX_INC		256
-#endif
-
+#define PJSIP_POOL_TSX_LAYER_LEN	4000
+#define PJSIP_POOL_TSX_LAYER_INC	4000
+#define PJSIP_POOL_TSX_LEN		1536 /* 768 */
+#define PJSIP_POOL_TSX_INC		256
 #define PJSIP_MAX_TSX_KEY_LEN		(PJSIP_MAX_URL_SIZE*2)
 
 /* User agent. */
