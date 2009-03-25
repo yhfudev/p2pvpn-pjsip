@@ -1,22 +1,12 @@
+
+
+//#define PJ_CONFIG_MINIMAL_SIZE
+//#define PJ_CONFIG_MAXIMUM_SPEED
+
+
 /*
- * This file contains several sample settings especially for Windows
- * Mobile and Symbian targets. You can include this file in your
- * <pj/config_site.h> file.
- *
- * The Windows Mobile and Symbian settings will be activated
- * automatically if you include this file.
- *
- * In addition, you may specify one of these macros (before including
- * this file) to activate additional settings:
- *
- * #define PJ_CONFIG_NOKIA_APS_DIRECT
- *   Use this macro to activate the APS-Direct feature. Please see
- *   http://trac.pjsip.org/repos/wiki/Nokia_APS_VAS_Direct for more 
- *   info.
- *
- * #define PJ_CONFIG_WIN32_WMME_DIRECT
- *   Configuration to activate "APS-Direct" media mode on Windows or
- *   Windows Mobile, useful for testing purposes only.
+ * This file (config_site_sample.h) contains various configuration
+ * settings that I use for certain settings. 
  */
 
 
@@ -24,63 +14,26 @@
  * Typical configuration for WinCE target.
  */
 #if defined(PJ_WIN32_WINCE) && PJ_WIN32_WINCE!=0
+#   define PJ_HAS_FLOATING_POINT	0
 
-    /*
-     * PJLIB settings.
-     */
+#   define PJMEDIA_HAS_G711_PLC		0
+//#   define PJMEDIA_HAS_SMALL_FILTER	1
+//#   define PJMEDIA_HAS_LARGE_FILTER	0
+#   define PJMEDIA_HAS_L16_CODEC	0
+/*#   define PJMEDIA_HAS_GSM_CODEC	0*/
+/*#   define PJMEDIA_HAS_ILBC_CODEC	0*/
+/*#   define PJMEDIA_HAS_SPEEX_CODEC	0*/
+#   define PJMEDIA_HAS_SPEEX_AEC	0
+#   undef PJMEDIA_RESAMPLE_IMP
+#   define PJMEDIA_RESAMPLE_IMP		PJMEDIA_RESAMPLE_LIBRESAMPLE
+#   define PJMEDIA_WSOLA_IMP		PJMEDIA_WSOLA_IMP_WSOLA_LITE
 
-    /* Disable floating point support */
-    #define PJ_HAS_FLOATING_POINT		0
+    /* Speex default quality settings */
+#   define PJSUA_DEFAULT_CODEC_QUALITY	5
+#   define PJMEDIA_CODEC_SPEEX_DEFAULT_QUALITY	5
 
-    /*
-     * PJMEDIA settings
-     */
-
-    /* Select codecs to disable */
-    #define PJMEDIA_HAS_L16_CODEC		0
-    #define PJMEDIA_HAS_ILBC_CODEC		0
-
-    /* We probably need more buffers on WM, so increase the limit */
-    #define PJMEDIA_SOUND_BUFFER_COUNT		32
-
-    /* Fine tune Speex's default settings for best performance/quality */
-    #define PJMEDIA_CODEC_SPEEX_DEFAULT_QUALITY	5
-
-    /* For CPU reason, disable speex AEC and use the echo suppressor. */
-    #define PJMEDIA_HAS_SPEEX_AEC		0
-
-    /* Shouldn't use resampling for performance reason too. */
-    #define PJMEDIA_RESAMPLE_IMP		PJMEDIA_RESAMPLE_NONE
-
-    /* Use the lighter WSOLA implementation */
-    #define PJMEDIA_WSOLA_IMP			PJMEDIA_WSOLA_IMP_WSOLA_LITE
-
-    /*
-     * PJSIP settings.
-     */
-
-    /* Set maximum number of dialog/transaction/calls to minimum to reduce
-     * memory usage 
-     */
-    #define PJSIP_MAX_TSX_COUNT 		31
-    #define PJSIP_MAX_DIALOG_COUNT 		31
-    #define PJSUA_MAX_CALLS			4
-
-    /*
-     * PJSUA settings
-     */
-
-    /* Default codec (Speex) quality */
-    #define PJSUA_DEFAULT_CODEC_QUALITY		5
-
-    /* Set maximum number of objects to minimum to reduce memory usage */
-    #define PJSUA_MAX_ACC			4
-    #define PJSUA_MAX_PLAYERS			4
-    #define PJSUA_MAX_RECORDERS			4
-    #define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
-    #define PJSUA_MAX_BUDDIES			32
-
-#endif	/* PJ_WIN32_WINCE */
+#   define PJMEDIA_SDP_NEG_PREFER_REMOTE_CODEC_ORDER	0
+#endif
 
 
 /*
@@ -88,158 +41,81 @@
  */
 #if defined(PJ_SYMBIAN) && PJ_SYMBIAN!=0
 
-    /*
-     * PJLIB settings.
-     */
+    /* We don't want to use float, for now */
+#   undef PJ_HAS_FLOATING_POINT
+#   define PJ_HAS_FLOATING_POINT	0
 
-    /* Disable floating point support */
-    #define PJ_HAS_FLOATING_POINT		0
+#   define PJMEDIA_SOUND_IMPLEMENTATION PJMEDIA_SOUND_NULL_SOUND
 
     /* Misc PJLIB setting */
-    #define PJ_MAXPATH				80
+#   define PJ_MAXPATH			80
+
+	/* SRTP has not been ported to Symbian yet */
+#   define PJMEDIA_HAS_SRTP			1
+
+    /* Disable these */
+#   define PJMEDIA_RESAMPLE_IMP		PJMEDIA_RESAMPLE_NONE
+#   define PJMEDIA_HAS_SPEEX_AEC	0
+#   define PJMEDIA_WSOLA_IMP		PJMEDIA_WSOLA_IMP_WSOLA_LITE
+
+    /* Disable all codecs but G.711 and GSM, for now */
+#   define PJMEDIA_HAS_GSM_CODEC	1
+#   define PJMEDIA_HAS_L16_CODEC	0
+#   define PJMEDIA_HAS_ILBC_CODEC	0
+#   define PJMEDIA_HAS_SPEEX_CODEC	1
+#   define PJMEDIA_HAS_G722_CODEC	0
+
+    /* Need larger sound buffers */
+#   define PJMEDIA_SOUND_BUFFER_COUNT	16
+
+    /* Disable safe module access */
+#   define PJSIP_SAFE_MODULE		0
+
+#   define PJSIP_MAX_PKT_LEN		2000
 
     /* This is important for Symbian. Symbian lacks vsnprintf(), so
      * if the log buffer is not long enough it's possible that
      * large incoming packet will corrupt memory when the log tries
      * to log the packet.
      */
-    #define PJ_LOG_MAX_SIZE			(PJSIP_MAX_PKT_LEN+500)
+#   define PJ_LOG_MAX_SIZE		(PJSIP_MAX_PKT_LEN+500)
 
-    /* Since we don't have threads, log buffer can use static buffer
-     * rather than stack
-     */
-    #define PJ_LOG_USE_STACK_BUFFER		0
+    /* Since we don't have threads, log buffer can use static buffer */
+#   define PJ_LOG_USE_STACK_BUFFER	0
 
-    /* Disable check stack since it increases footprint */
-    #define PJ_OS_HAS_CHECK_STACK		0
-
-
-    /*
-     * PJMEDIA settings
-     */
-
-    /* Disable non-Symbian audio devices */
-    #define PJMEDIA_AUDIO_DEV_HAS_PORTAUDIO	0
-    #define PJMEDIA_AUDIO_DEV_HAS_WMME		0
-
-    /* Select codecs to disable */
-    #define PJMEDIA_HAS_L16_CODEC		0
-    #define PJMEDIA_HAS_ILBC_CODEC		0
-    #define PJMEDIA_HAS_G722_CODEC		0
-
-    /* Fine tune Speex's default settings for best performance/quality */
-    #define PJMEDIA_CODEC_SPEEX_DEFAULT_QUALITY	5
-
-    /* For CPU reason, disable speex AEC and use the echo suppressor. */
-    #define PJMEDIA_HAS_SPEEX_AEC		0
-
-    /* Shouldn't use resampling for performance reason too. */
-    #define PJMEDIA_RESAMPLE_IMP		PJMEDIA_RESAMPLE_NONE
-
-    /* Use the lighter WSOLA implementation */
-    #define PJMEDIA_WSOLA_IMP			PJMEDIA_WSOLA_IMP_WSOLA_LITE
-
-    /* We probably need more buffers especially if MDA audio backend 
-     * is used, so increase the limit 
-     */
-    #define PJMEDIA_SOUND_BUFFER_COUNT		32
-
-    /*
-     * PJSIP settings.
-     */
-
-    /* Disable safe module access, since we don't use multithreading */
-    #define PJSIP_SAFE_MODULE			0
-
-    /* Increase allowable packet size, just in case */
-    #define PJSIP_MAX_PKT_LEN			2000
+	/* Disable check stack since it increases footprint */
+#   undef PJ_OS_HAS_CHECK_STACK
+#   define PJ_OS_HAS_CHECK_STACK	0
 
     /* Symbian has problem with too many large blocks */
-    #define PJSIP_POOL_LEN_ENDPT		1000
-    #define PJSIP_POOL_INC_ENDPT		1000
-    #define PJSIP_POOL_RDATA_LEN		2000
-    #define PJSIP_POOL_RDATA_INC		2000
-    #define PJSIP_POOL_LEN_TDATA		2000
-    #define PJSIP_POOL_INC_TDATA		512
-    #define PJSIP_POOL_LEN_UA			2000
-    #define PJSIP_POOL_INC_UA			1000
-    #define PJSIP_POOL_TSX_LAYER_LEN		256
-    #define PJSIP_POOL_TSX_LAYER_INC		256
-    #define PJSIP_POOL_TSX_LEN			512
-    #define PJSIP_POOL_TSX_INC			128
-
-    /*
-     * PJSUA settings.
-     */
-
-    /* Default codec quality */
-    #define PJSUA_DEFAULT_CODEC_QUALITY		5
+#   define PJSIP_POOL_LEN_ENDPT		1000
+#   define PJSIP_POOL_INC_ENDPT		1000
+#   define PJSIP_POOL_RDATA_LEN		2000
+#   define PJSIP_POOL_RDATA_INC		2000
+#   define PJSIP_POOL_LEN_TDATA		2000
+#   define PJSIP_POOL_INC_TDATA		512
+#   define PJSIP_POOL_LEN_UA		2000
+#   define PJSIP_POOL_INC_UA		1000
+#   define PJSIP_POOL_TSX_LAYER_LEN	256
+#   define PJSIP_POOL_TSX_LAYER_INC	256
+#   define PJSIP_POOL_TSX_LEN		512
+#   define PJSIP_POOL_TSX_INC		128
 
     /* Set maximum number of dialog/transaction/calls to minimum */
-    #define PJSIP_MAX_TSX_COUNT 		31
-    #define PJSIP_MAX_DIALOG_COUNT 		31
-    #define PJSUA_MAX_CALLS			4
+#   define PJSIP_MAX_TSX_COUNT 		31
+#   define PJSIP_MAX_DIALOG_COUNT 	31
+#   define PJSUA_MAX_CALLS		4
 
     /* Other pjsua settings */
-    #define PJSUA_MAX_ACC			4
-    #define PJSUA_MAX_PLAYERS			4
-    #define PJSUA_MAX_RECORDERS			4
-    #define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
-    #define PJSUA_MAX_BUDDIES			32
-#endif
+#   define PJSUA_MAX_ACC		4
+#   define PJSUA_MAX_PLAYERS		4
+#   define PJSUA_MAX_RECORDERS		4
+#   define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
+#   define PJSUA_MAX_BUDDIES		32
 
-
-/*
- * Additional configuration to activate APS-Direct feature for
- * Nokia S60 target
- *
- * Please see http://trac.pjsip.org/repos/wiki/Nokia_APS_VAS_Direct
- */
-#ifdef PJ_CONFIG_NOKIA_APS_DIRECT
-
-    /* MUST use switchboard rather than the conference bridge */
-    #define PJMEDIA_CONF_USE_SWITCH_BOARD	1
-
-    /* Enable APS sound device backend and disable MDA */
-    #define PJMEDIA_AUDIO_DEV_HAS_SYMB_MDA	0
-    #define PJMEDIA_AUDIO_DEV_HAS_SYMB_APS	1
-
-    /* Enable passthrough codec framework */
-    #define PJMEDIA_HAS_PASSTHROUGH_CODECS	1
-
-    /* And selectively enable which codecs are supported by the handset */
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_PCMU	1
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_PCMA	1
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_AMR	1
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_G729	1
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_ILBC	1
-
-#endif
-
-
-/*
- * Configuration to activate "APS-Direct" media mode on Windows,
- * useful for testing purposes only.
- */
-#ifdef PJ_CONFIG_WIN32_WMME_DIRECT
-
-    /* MUST use switchboard rather than the conference bridge */
-    #define PJMEDIA_CONF_USE_SWITCH_BOARD	1
-
-    /* Only WMME supports the "direct" feature */
-    #define PJMEDIA_AUDIO_DEV_HAS_PORTAUDIO	0
-    #define PJMEDIA_AUDIO_DEV_HAS_WMME		1
-
-    /* Enable passthrough codec framework */
-    #define PJMEDIA_HAS_PASSTHROUGH_CODECS	1
-
-    /* Only PCMA and PCMU are supported by WMME-direct */
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_PCMU	1
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_PCMA	1
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_AMR	0
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_G729	0
-    #define PJMEDIA_HAS_PASSTHROUGH_CODEC_ILBC	0
-
+    /* Speex default quality settings */
+#   define PJSUA_DEFAULT_CODEC_QUALITY	5
+#   define PJMEDIA_CODEC_SPEEX_DEFAULT_QUALITY	5
 #endif
 
 

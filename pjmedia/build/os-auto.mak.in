@@ -78,24 +78,23 @@ endif
 # PortAudio
 #
 ifneq ($(findstring pa,$(AC_PJMEDIA_SND)),)
-export CFLAGS += -I$(THIRD_PARTY)/build/portaudio -I$(THIRD_PARTY)/portaudio/include -DPJMEDIA_AUDIO_DEV_HAS_PORTAUDIO=1
+export CFLAGS += -I$(THIRD_PARTY)/build/portaudio -I$(THIRD_PARTY)/portaudio/include -DPJMEDIA_SOUND_IMPLEMENTATION=PJMEDIA_SOUND_PORTAUDIO_SOUND
+export SOUND_OBJS = pasound.o
 endif
 
 #
-# Windows specific
+# Win32 DirectSound
 #
-ifneq ($(findstring win32,$(AC_PJMEDIA_SND)),)
-export CFLAGS += -DPJMEDIA_AUDIO_DEV_HAS_WMME=1
-else
-export CFLAGS += -DPJMEDIA_AUDIO_DEV_HAS_WMME=0
+ifeq ($(AC_PJMEDIA_SND),ds)
+export SOUND_OBJS = dsound.o
+export CFLAGS += -DPJMEDIA_SOUND_IMPLEMENTATION=PJMEDIA_SOUND_WIN32_DIRECT_SOUND
 endif
 
 #
 # Null sound device
 #
 ifeq ($(AC_PJMEDIA_SND),null)
-# ***** Error ******
-# This will not work either with the new Audiodev
+export SOUND_OBJS = nullsound.o
 export CFLAGS += -DPJMEDIA_SOUND_IMPLEMENTATION=PJMEDIA_SOUND_NULL_SOUND
 endif
 
@@ -103,7 +102,8 @@ endif
 # External sound device
 #
 ifeq ($(AC_PJMEDIA_SND),external)
-export CFLAGS += -DPJMEDIA_AUDIO_DEV_HAS_PORTAUDIO=0 -DPJMEDIA_AUDIO_DEV_HAS_WMME=0
+export SOUND_OBJS = 
+export CFLAGS += -DPJMEDIA_SOUND_IMPLEMENTATION=PJMEDIA_SOUND_EXTERNAL
 endif
 
 

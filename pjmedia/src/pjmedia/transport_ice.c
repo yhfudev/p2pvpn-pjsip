@@ -21,7 +21,6 @@
 #include <pjnath/errno.h>
 #include <pj/assert.h>
 #include <pj/log.h>
-#include <pj/pool.h>
 #include <pj/rand.h>
 
 #define THIS_FILE   "transport_ice.c"

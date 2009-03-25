@@ -109,15 +109,15 @@ SOURCE=..\src\pjmedia\codec.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\src\pjmedia\conf_switch.c
-# End Source File
-# Begin Source File
-
 SOURCE=..\src\pjmedia\conference.c
 # End Source File
 # Begin Source File
 
 SOURCE=..\src\pjmedia\delaybuf.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\src\pjmedia\dsound.c
 # End Source File
 # Begin Source File
 
@@ -170,6 +170,14 @@ SOURCE=..\src\pjmedia\mem_player.c
 # Begin Source File
 
 SOURCE=..\src\pjmedia\null_port.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\src\pjmedia\nullsound.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\src\pjmedia\pasound.c
 # End Source File
 # Begin Source File
 
@@ -229,10 +237,6 @@ SOURCE=..\src\pjmedia\silencedet.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\src\pjmedia\sound_legacy.c
-# End Source File
-# Begin Source File
-
 SOURCE=..\src\pjmedia\sound_port.c
 # End Source File
 # Begin Source File
@@ -289,6 +293,10 @@ SOURCE=..\src\pjmedia\wave.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\src\pjmedia\wmme_sound.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\src\pjmedia\wsola.c
 # End Source File
 # End Group
@@ -298,10 +306,6 @@ SOURCE=..\src\pjmedia\wsola.c
 # Begin Source File
 
 SOURCE=..\include\pjmedia\alaw_ulaw.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\include\pjmedia\audio_dev.h
 # End Source File
 # Begin Source File
 

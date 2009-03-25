@@ -13,8 +13,7 @@ SRCDIR := ../src/samples
 OBJDIR := ./output/samples-$(TARGET_NAME)
 BINDIR := ../bin/samples
 
-SAMPLES := auddemo \
-	   confsample \
+SAMPLES := confsample \
 	   encdec \
 	   latency \
 	   level \
@@ -29,6 +28,8 @@ SAMPLES := auddemo \
 	   simple_pjsua \
 	   siprtp \
 	   sipstateless \
+	   sndinfo \
+	   sndtest \
 	   stateful_proxy \
 	   stateless_proxy \
 	   stereotest \

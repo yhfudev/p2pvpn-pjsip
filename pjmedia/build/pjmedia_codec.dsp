@@ -147,10 +147,6 @@ SOURCE="..\src\pjmedia-codec\l16.c"
 # End Source File
 # Begin Source File
 
-SOURCE="..\src\pjmedia-codec\passthrough.c"
-# End Source File
-# Begin Source File
-
 SOURCE="..\src\pjmedia-codec\speex_codec.c"
 
 !IF  "$(CFG)" == "pjmedia_codec - Win32 Release"
@@ -193,10 +189,6 @@ SOURCE="..\include\pjmedia-codec\ipp_codecs.h"
 # Begin Source File
 
 SOURCE="..\include\pjmedia-codec\l16.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\include\pjmedia-codec\passthrough.h"
 # End Source File
 # Begin Source File
 

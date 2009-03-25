@@ -15,6 +15,10 @@ LIBRARY		pjlib.lib
 STATICLIBRARY	pjlib.lib 
 #endif
 
+OPTION		CW -lang c++
+OPTION		ARMCC --cpp
+OPTION		GCC	-x c++
+
 // Test files
 
 SOURCE	activesock.c
