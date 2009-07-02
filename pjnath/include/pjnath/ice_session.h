@@ -30,11 +30,19 @@
 #include <pj/sock.h>
 #include <pj/timer.h>
 
+/**
+ * @defgroup PJNATH_ICE Interactive Connectivity Establishment (ICE)
+ * @brief Interactive Connectivity Establishment (ICE)
+ */
+
+
 PJ_BEGIN_DECL
 
 
 /**
- * @addtogroup PJNATH_ICE_SESSION
+ * @defgroup PJNATH_ICE_SESSION ICE Session
+ * @brief Transport Independent ICE Session
+ * @ingroup PJNATH_ICE
  * @{
  *
  * This module describes #pj_ice_sess, a transport independent ICE session,
@@ -176,18 +184,11 @@ typedef struct pj_ice_sess_check pj_ice_sess_check;
 typedef struct pj_ice_sess_comp
 {
     /**
-     * Pointer to ICE check with highest priority which connectivity check
-     * has been successful. The value will be NULL if a no successful check
-     * has not been found for this component.
+     * The pointer to ICE check which was nominated for this component.
+     * The value will be NULL if a nominated check has not been found
+     * for this component.
      */
     pj_ice_sess_check	*valid_check;
-
-    /**
-     * Pointer to ICE check with highest priority which connectivity check
-     * has been successful and it has been nominated. The value may be NULL
-     * if there is no such check yet.
-     */
-    pj_ice_sess_check	*nominated_check;
 
     /**
      * The STUN session to be used to send and receive STUN messages for this
@@ -203,22 +204,16 @@ typedef struct pj_ice_sess_comp
  */
 typedef struct pj_ice_msg_data
 {
-    /** Transport ID for this message */
     unsigned	transport_id;
-
-    /** Flag to indicate whether data.req contains data */
     pj_bool_t	has_req_data;
 
-    /** The data */
     union data {
-	/** Request data */
 	struct request_data {
-	    pj_ice_sess		    *ice;   /**< ICE session	*/
-	    pj_ice_sess_checklist   *clist; /**< Checklist	*/
-	    unsigned		     ckid;  /**< Check ID	*/
+	    pj_ice_sess		    *ice;
+	    pj_ice_sess_checklist   *clist;
+	    unsigned		     ckid;
 	} req;
     } data;
-
 } pj_ice_msg_data;
 
 
@@ -544,7 +539,7 @@ typedef enum pj_ice_sess_role
  */
 typedef struct pj_ice_rx_check
 {
-    PJ_DECL_LIST_MEMBER(struct pj_ice_rx_check); /**< Standard list     */
+    PJ_DECL_LIST_MEMBER(struct pj_ice_rx_check);
 
     unsigned		 comp_id;	/**< Component ID.		*/
     unsigned		 transport_id;	/**< Transport ID.		*/
@@ -557,44 +552,6 @@ typedef struct pj_ice_rx_check
     pj_stun_uint64_attr *role_attr;	/**< ICE-CONTROLLING/CONTROLLED	*/
 
 } pj_ice_rx_check;
-
-
-/**
- * This structure describes various ICE session options. Application
- * configure the ICE session with these options by calling 
- * #pj_ice_sess_set_options().
- */
-typedef struct pj_ice_sess_options
-{
-    /**
-     * Specify whether to use aggressive nomination.
-     */
-    pj_bool_t		aggressive;
-
-    /**
-     * For controlling agent if it uses regular nomination, specify the delay
-     * to perform nominated check (connectivity check with USE-CANDIDATE 
-     * attribute) after all components have a valid pair.
-     *
-     * Default value is PJ_ICE_NOMINATED_CHECK_DELAY.
-     */
-    unsigned		nominated_check_delay;
-
-    /**
-     * For a controlled agent, specify how long it wants to wait (in 
-     * milliseconds) for the controlling agent to complete sending 
-     * connectivity check with nominated flag set to true for all components
-     * after the controlled agent has found that all connectivity checks in
-     * its checklist have been completed and there is at least one successful
-     * (but not nominated) check for every component.
-     *
-     * Default value for this option is 
-     * ICE_CONTROLLED_AGENT_WAIT_NOMINATION_TIMEOUT. Specify -1 to disable
-     * this timer.
-     */
-    int			controlled_agent_want_nom_timeout;
-
-} pj_ice_sess_options;
 
 
 /**
@@ -614,13 +571,11 @@ struct pj_ice_sess
     void		*user_data;		    /**< App. data.	    */
     pj_mutex_t		*mutex;			    /**< Mutex.		    */
     pj_ice_sess_role	 role;			    /**< ICE role.	    */
-    pj_ice_sess_options	 opt;			    /**< Options	    */
     pj_timestamp	 tie_breaker;		    /**< Tie breaker value  */
     pj_uint8_t		*prefs;			    /**< Type preference.   */
-    pj_bool_t		 is_nominating;		    /**< Nominating stage   */
     pj_bool_t		 is_complete;		    /**< Complete?	    */
     pj_status_t		 ice_status;		    /**< Error status.	    */
-    pj_timer_entry	 timer;			    /**< ICE timer.	    */
+    pj_timer_entry	 completion_timer;	    /**< To call callback.  */
     pj_ice_sess_cb	 cb;			    /**< Callback.	    */
 
     pj_stun_config	 stun_cfg;		    /**< STUN settings.	    */
@@ -636,7 +591,6 @@ struct pj_ice_sess
     /* Components */
     unsigned		 comp_cnt;		    /**< # of components.   */
     pj_ice_sess_comp	 comp[PJ_ICE_MAX_COMP];	    /**< Component array    */
-    unsigned		 comp_ka;		    /**< Next comp for KA   */
 
     /* Local candidates */
     unsigned		 lcand_cnt;		    /**< # of local cand.   */
@@ -646,7 +600,7 @@ struct pj_ice_sess
     unsigned		 rcand_cnt;		    /**< # of remote cand.  */
     pj_ice_sess_cand	 rcand[PJ_ICE_MAX_CAND];    /**< Array of cand.	    */
 
-    /** Array of transport datas */
+    /* Array of transport datas */
     pj_ice_msg_data	 tp_data[4];
 
     /* List of eearly checks */
@@ -658,7 +612,7 @@ struct pj_ice_sess
     /* Valid list */
     pj_ice_sess_checklist valid_list;		    /**< Valid list.	    */
     
-    /** Temporary buffer for misc stuffs to avoid using stack too much */
+    /* Temporary buffer for misc stuffs to avoid using stack too much */
     union {
     	char txt[128];
 	char errmsg[PJ_ERR_MSG_SIZE];
@@ -702,12 +656,6 @@ PJ_DECL(void) pj_ice_calc_foundation(pj_pool_t *pool,
 				     pj_ice_cand_type type,
 				     const pj_sockaddr *base_addr);
 
-/**
- * Initialize ICE session options with library default values.
- *
- * @param opt		ICE session options.
- */
-PJ_DECL(void) pj_ice_sess_options_default(pj_ice_sess_options *opt);
 
 /**
  * Create ICE session with the specified role and number of components.
@@ -741,34 +689,6 @@ PJ_DECL(pj_status_t) pj_ice_sess_create(pj_stun_config *stun_cfg,
 				        const pj_str_t *local_ufrag,
 				        const pj_str_t *local_passwd,
 				        pj_ice_sess **p_ice);
-
-/**
- * Get the value of various options of the ICE session.
- *
- * @param ice		The ICE session.
- * @param opt		The options to be initialized with the values
- *			from the ICE session.
- *
- * @return		PJ_SUCCESS on success, or the appropriate error.
- */
-PJ_DECL(pj_status_t) pj_ice_sess_get_options(pj_ice_sess *ice,
-					     pj_ice_sess_options *opt);
-
-/**
- * Specify various options for this ICE session. Application MUST only
- * call this function after the ICE session has been created but before
- * any connectivity check is started.
- *
- * Application should call #pj_ice_sess_get_options() to initialize the
- * options with their default values.
- *
- * @param ice		The ICE session.
- * @param opt		Options to be applied to the ICE session.
- *
- * @return		PJ_SUCCESS on success, or the appropriate error.
- */
-PJ_DECL(pj_status_t) pj_ice_sess_set_options(pj_ice_sess *ice,
-					     const pj_ice_sess_options *opt);
 
 /**
  * Destroy ICE session. This will cancel any connectivity checks currently

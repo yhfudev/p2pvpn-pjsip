@@ -59,11 +59,6 @@
  * is not identical)
  */
  
-#ifdef _MSC_VER
-#   pragma warning(push)
-#   pragma warning(disable:4214) // bit field types other than int
-#endif
-
 #ifndef WORDS_BIGENDIAN
 
 /*
@@ -72,6 +67,7 @@
  * "unsigned char", but doing so causes the MS compiler to not
  * fully pack the bit fields.
  */
+
 typedef struct {
   unsigned char cc:4;	/* CSRC count             */
   unsigned char x:1;	/* header extension flag  */
@@ -99,7 +95,6 @@ typedef struct {
 } srtp_hdr_t;
 
 #endif
-
 
 typedef struct {
   uint16_t profile_specific;    /* profile-specific info               */
@@ -159,11 +154,6 @@ typedef struct {
   /* and then the variable-length auth tag */
 } srtcp_trailer_t;
 
-#endif
-
-
-#ifdef _MSC_VER
-#   pragma warning( pop ) 
 #endif
 
 

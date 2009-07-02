@@ -60,7 +60,6 @@ typedef struct turn_allocation
     pj_sockaddr		 alloc_addr;
     unsigned		 perm_cnt;
     pj_sockaddr		 perm[MAX_TURN_PERM];
-    unsigned		 chnum[MAX_TURN_PERM];
     pj_stun_msg		*data_ind;
 } turn_allocation;
 

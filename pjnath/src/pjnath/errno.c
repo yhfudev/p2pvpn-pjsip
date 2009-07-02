@@ -51,7 +51,6 @@ static const struct
 
     PJ_BUILD_ERR( PJNATH_ESTUNNOMAPPEDADDR, "STUN (XOR-)MAPPED-ADDRESS attribute not found"),
     PJ_BUILD_ERR( PJNATH_ESTUNIPV6NOTSUPP,  "STUN IPv6 attribute not supported"),
-    PJ_BUILD_ERR( PJNATH_EINVAF,	    "Invalid STUN address family value"),
     PJ_BUILD_ERR( PJNATH_ESTUNINSERVER,	    "Invalid STUN server or server not configured"),
 
     PJ_BUILD_ERR( PJNATH_ESTUNDESTROYED,    "STUN object has been destoyed"),
@@ -67,7 +66,6 @@ static const struct
     PJ_BUILD_ERR( PJNATH_EICEMISSINGSDP,    "Missing ICE SDP attribute"),
     PJ_BUILD_ERR( PJNATH_EICEINCANDSDP,	    "Invalid SDP \"candidate\" attribute"),
     PJ_BUILD_ERR( PJNATH_EICENOHOSTCAND,    "No host candidate associated with srflx"),
-    PJ_BUILD_ERR( PJNATH_EICENOMTIMEOUT,    "Controlled agent timed out waiting for nomination"),
 
     /* TURN related errors */
     PJ_BUILD_ERR( PJNATH_ETURNINTP,	    "Invalid/unsupported transport"),

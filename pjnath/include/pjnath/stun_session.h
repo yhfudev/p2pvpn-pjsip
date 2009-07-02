@@ -37,130 +37,10 @@ PJ_BEGIN_DECL
 
 /* **************************************************************************/
 /**
- * @addtogroup PJNATH_STUN_SESSION
+ * @defgroup PJNATH_STUN_SESSION STUN Client/Server Session
+ * @brief STUN client and server session
+ * @ingroup PJNATH_STUN
  * @{
- *
- * This is is a transport-independent object to manage a client or server 
- * STUN session. It has the following features:
- * 
- *  - <b>transport independent</b>:\n
- *    the object does not have it's own socket, but rather it provides
- *    functions and callbacks to send and receive packets. This way the
- *    object can be used by different transport types (e.g. UDP, TCP, 
- *    TLS, etc.) as well as better integration to application which
- *    already has its own means to send and receive packets.
- * 
- *  - <b>authentication management</b>:\n
- *    the object manages STUN authentication throughout the lifetime of
- *    the session. For client sessions, once it's given a credential to
- *    authenticate itself with the server, the object will automatically
- *    add authentication info (the MESSAGE-INTEGRITY) to the request as
- *    well as authenticate the response. It will also handle long-term 
- *    authentication challenges, including handling of nonce expiration,
- *    and retry the request automatically. For server sessions, it can 
- *    be configured to authenticate incoming requests automatically.
- *  
- *  - <b>static or dynamic credential</b>:\n
- *    application may specify static or dynamic credential to be used by
- *    the STUN session. Static credential means a static combination of
- *    username and password (and these cannot change during the session
- *    duration), while dynamic credential provides callback to ask the
- *    application about which username/password to use everytime
- *    authentication is about to be performed.
- *    
- *  - <b>client transaction management</b>:\n
- *    outgoing requests may be sent with a STUN transaction for reliability,
- *    and the object will manage the transaction internally (including
- *    performing retransmissions). Application will be notified about the
- *    result of the request when the response arrives (or the transaction
- *    times out). When the request is challenged with authentication, the
- *    object will retry the request with new authentication info, and 
- *    application will be notified about the final result of this request.
- * 
- *  - <b>server transaction management</b>:\n
- *    application may ask response to incoming requests to be cached by
- *    the object, and in this case the object will check for cached
- *    response everytime request is received. The cached response will be
- *    deleted once a timer expires.
- *
- * \section using_stun_sess_sec Using the STUN session
- *
- * The following steps describes how to use the STUN session:
- *
- *  - <b>create the object configuration</b>:\n
- *    The #pj_stun_config contains the configuration to create the STUN
- *    session, such as the timer heap to register internal timers and
- *    various STUN timeout values. You can initialize this structure by
- *    calling #pj_stun_config_init()
- *
- *  - <b>create the STUN session</b>:\n
- *    by calling #pj_stun_session_create(). Among other things, this
- *    function requires the instance of #pj_stun_config and also 
- *    #pj_stun_session_cb structure which stores callbacks to send
- *    outgoing packets as well as to notify application about incoming
- *    STUN requests, responses, and indicates and other events.
- *
- *  - <b>configure credential:</b>\n
- *    if authentication is required for the session, configure the
- *    credential with #pj_stun_session_set_credential()
- *
- *  - <b>configuring other settings:</b>\n
- *    several APIs are provided to configure the behavior of the STUN
- *    session (for example, to set the SOFTWARE attribute value, controls
- *    the logging behavior, fine tune the mutex locking, etc.). Please see
- *    the API reference for more info.
- *
- *  - <b>creating outgoing STUN requests or indications:</b>\n
- *    create the STUN message by using #pj_stun_session_create_req() or
- *    #pj_stun_session_create_ind(). This will create a transmit data
- *    buffer containing a blank STUN request or indication. You will then
- *    typically need to add STUN attributes that are relevant to the
- *    request or indication, but note that some default attributes will
- *    be added by the session later when the message is sent (such as
- *    SOFTWARE attribute and attributes related to authentication).
- *    The message is now ready to be sent.
- *
- *  - <b>sending outgoing message:</b>\n
- *    use #pj_stun_session_send_msg() to send outgoing STUN messages (this
- *    includes STUN requests, indications, and responses). The function has
- *    options whether to retransmit the request (for non reliable transports)
- *    or to cache the response if we're sending response. This function in 
- *    turn will call the \a on_send_msg() callback of #pj_stun_session_cb 
- *    to request the application to send the packet.
- *
- *  - <b>handling incoming packet:</b>\n
- *    call #pj_stun_session_on_rx_pkt() everytime the application receives
- *    a STUN packet. This function will decode the packet and process the
- *    packet according to the message, and normally this will cause one
- *    of the callback in the #pj_stun_session_cb to be called to notify
- *    the application about the event.
- *
- *  - <b>handling incoming requests:</b>\n
- *    incoming requests are notified to application in the \a on_rx_request
- *    callback of the #pj_stun_session_cb. If authentication is enabled in
- *    the session, the application will only receive this callback after
- *    the incoming request has been authenticated (if the authentication
- *    fails, the session would respond automatically with 401 error and
- *    the callback will not be called). Application now must create and
- *    send response for this request.
- *
- *  - <b>creating and sending response:</b>\n
- *    create the STUN response with #pj_stun_session_create_res(). This will
- *    create a transmit data buffer containing a blank STUN response. You 
- *    will then typically need to add STUN attributes that are relevant to
- *    the response, but note that some default attributes will
- *    be added by the session later when the message is sent (such as
- *    SOFTWARE attribute and attributes related to authentication).
- *    The message is now ready to be sent. Use #pj_stun_session_send_msg()
- *    (as explained above) to send the response.
- *
- *  - <b>convenient way to send response:</b>\n
- *    the #pj_stun_session_respond() is provided as a convenient way to
- *    create and send simple STUN responses, such as error responses.
- *    
- *  - <b>destroying the session:</b>\n
- *    once the session is done, use #pj_stun_session_destroy() to destroy
- *    the session.
  */
 
 
@@ -447,17 +327,15 @@ PJ_DECL(pj_status_t) pj_stun_session_set_lock(pj_stun_session *sess,
 					      pj_bool_t auto_del);
 
 /**
- * Set SOFTWARE name to be included in all requests and responses.
+ * Set server name to be included in all response.
  *
  * @param sess	    The STUN session instance.
- * @param sw	    Software name string. If this argument is NULL or
- *		    empty, the session will not include SOFTWARE attribute
- *		    in STUN requests and responses.
+ * @param srv_name  Server name string.
  *
- * @return	    PJ_SUCCESS on success, or the appropriate error code.
+ * @return	    The user data associated with this STUN session.
  */
-PJ_DECL(pj_status_t) pj_stun_session_set_software_name(pj_stun_session *sess,
-						       const pj_str_t *sw);
+PJ_DECL(pj_status_t) pj_stun_session_set_server_name(pj_stun_session *sess,
+						     const pj_str_t *srv_name);
 
 /**
  * Set credential to be used by this session. Once credential is set, all
@@ -485,18 +363,6 @@ PJ_DECL(pj_status_t) pj_stun_session_set_credential(pj_stun_session *sess,
  */
 PJ_DECL(void) pj_stun_session_set_log(pj_stun_session *sess,
 				      unsigned flags);
-/**
- * Configure whether the STUN session should utilize FINGERPRINT in
- * outgoing messages.
- *
- * @param sess	    The STUN session instance.
- * @param use	    Boolean for the setting.
- *
- * @return	    The previous configured value of FINGERPRINT
- *		    utilization of the sessoin.
- */
-PJ_DECL(pj_bool_t) pj_stun_session_use_fingerprint(pj_stun_session *sess,
-						   pj_bool_t use);
 
 /**
  * Create a STUN request message. After the message has been successfully

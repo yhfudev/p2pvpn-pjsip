@@ -227,35 +227,6 @@ PJ_INLINE(pjsip_cfg_t*) pjsip_cfg(void)
 
 
 /**
- * RFC 3261 section 18.1.1:
- * If a request is within 200 bytes of the path MTU, or if it is larger
- * than 1300 bytes and the path MTU is unknown, the request MUST be sent
- * using an RFC 2914 [43] congestion controlled transport protocol, such
- * as TCP.
- *
- * Disable the behavior of automatic switching to TCP whenever UDP packet
- * size exceeds the threshold defined in PJSIP_UDP_SIZE_THRESHOLD.
- *
- * Default is 0 (no).
- */
-#ifndef PJSIP_DONT_SWITCH_TO_TCP
-#   define PJSIP_DONT_SWITCH_TO_TCP	0
-#endif
-
-
-/**
- * This setting controls the threshold of the UDP packet, which if it's
- * larger than this value the request will be sent with TCP. This setting
- * is useful only when PJSIP_DONT_SWITCH_TO_TCP is set to 0.
- *
- * Default is 1300 bytes.
- */
-#ifndef PJSIP_UDP_SIZE_THRESHOLD
-#   define PJSIP_UDP_SIZE_THRESHOLD	1300
-#endif
-
-
-/**
  * Encode SIP headers in their short forms to reduce size. By default,
  * SIP headers in outgoing messages will be encoded in their full names. 
  * If this option is enabled, then SIP headers for outgoing messages
@@ -803,83 +774,6 @@ PJ_INLINE(pjsip_cfg_t*) pjsip_cfg(void)
  */
 #ifndef PJSIP_REGISTER_CLIENT_ADD_XUID_PARAM
 #   define PJSIP_REGISTER_CLIENT_ADD_XUID_PARAM	0
-#endif
-
-
-/*****************************************************************************
- *  SIP Event framework and presence settings.
- */
-
-/**
- * Specify the time (in seconds) to send SUBSCRIBE to refresh client 
- * subscription before the actual interval expires.
- *
- * Default: 5 seconds
- */
-#ifndef PJSIP_EVSUB_TIME_UAC_REFRESH
-#   define PJSIP_EVSUB_TIME_UAC_REFRESH		5
-#endif
-
-
-/**
- * Specify the time (in seconds) to send PUBLISH to refresh client 
- * publication before the actual interval expires.
- *
- * Default: 5 seconds
- */
-#ifndef PJSIP_PUBLISHC_DELAY_BEFORE_REFRESH
-#   define PJSIP_PUBLISHC_DELAY_BEFORE_REFRESH	5
-#endif
-
-
-/**
- * Specify the time (in seconds) to wait for the final NOTIFY from the
- * server after client has sent un-SUBSCRIBE request.
- *
- * Default: 5 seconds
- */
-#ifndef PJSIP_EVSUB_TIME_UAC_TERMINATE
-#   define PJSIP_EVSUB_TIME_UAC_TERMINATE	5
-#endif
-
-
-/**
- * Specify the time (in seconds) for client subscription to wait for another
- * NOTIFY from the server, if it has rejected the last NOTIFY with non-2xx
- * final response (such as 401). If further NOTIFY is not received within
- * this period, the client will unsubscribe.
- *
- * Default: 5 seconds
- */
-#ifndef PJSIP_EVSUB_TIME_UAC_WAIT_NOTIFY
-#   define PJSIP_EVSUB_TIME_UAC_WAIT_NOTIFY	5
-#endif
-
-
-/**
- * Specify the default expiration time for presence event subscription, for
- * both client and server subscription. For client subscription, application
- * can override this by specifying positive non-zero value in "expires" 
- * parameter when calling #pjsip_pres_initiate(). For server subscription,
- * we would take the expiration value from the Expires header sent by client
- * in the SUBSCRIBE request if the header exists and its value is less than 
- * this setting, otherwise this setting will be used.
- *
- * Default: 600 seconds (10 minutes)
- */
-#ifndef PJSIP_PRES_DEFAULT_EXPIRES
-#   define PJSIP_PRES_DEFAULT_EXPIRES		600
-#endif
-
-
-/**
- * Add "timestamp" information in generated PIDF document for both server
- * subscription and presence publication.
- *
- * Default: 1 (yes)
- */
-#ifndef PJSIP_PRES_PIDF_ADD_TIMESTAMP
-#   define PJSIP_PRES_PIDF_ADD_TIMESTAMP	1
 #endif
 
 

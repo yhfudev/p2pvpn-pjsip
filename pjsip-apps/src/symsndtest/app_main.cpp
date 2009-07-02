@@ -17,9 +17,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA 
  */
-#include <pjmedia-audiodev/audiodev.h>
 #include <pjmedia/delaybuf.h>
-#include <pj/assert.h>
+#include <pjmedia/sound.h>
 #include <pj/errno.h>
 #include <pj/os.h>
 #include <pj/log.h>
@@ -37,7 +36,7 @@
 extern CConsoleBase* console;
 
 static pj_caching_pool cp;
-static pjmedia_aud_stream *strm;
+static pjmedia_snd_stream *strm;
 static unsigned rec_cnt, play_cnt;
 static pj_time_val t_start;
 
@@ -50,7 +49,7 @@ static void log_writer(int level, const char *buf, unsigned len)
     static wchar_t buf16[PJ_LOG_MAX_SIZE];
 
     PJ_UNUSED_ARG(level);
-
+    
     pj_ansi_to_unicode(buf, len, buf16, PJ_ARRAY_SIZE(buf16));
 
     TPtrC16 aBuf((const TUint16*)buf16, (TInt)len);
@@ -58,24 +57,24 @@ static void log_writer(int level, const char *buf, unsigned len)
 }
 
 /* perror util */
-static void app_perror(const char *title, pj_status_t status)
+static void app_perror(const char *title, pj_status_t status) 
 {
-    char errmsg[PJ_ERR_MSG_SIZE];
+    char errmsg[PJ_ERR_MSG_SIZE];	
     pj_strerror(status, errmsg, sizeof(errmsg));
     PJ_LOG(1,(THIS_FILE, "Error: %s: %s", title, errmsg));
 }
 
 /* Application init */
-static pj_status_t app_init()
+static pj_status_t app_init() 
 {
     unsigned i, count;
     pj_status_t status;
-
+   
     /* Redirect log */
     pj_log_set_log_func((void (*)(int,const char*,int)) &log_writer);
     pj_log_set_decor(PJ_LOG_HAS_NEWLINE);
     pj_log_set_level(3);
-
+    
     /* Init pjlib */
     status = pj_init();
     if (status != PJ_SUCCESS) {
@@ -84,27 +83,25 @@ static pj_status_t app_init()
     }
 
     pj_caching_pool_init(&cp, NULL, 0);
-
+    
     /* Init sound subsystem */
-    status = pjmedia_aud_subsys_init(&cp.factory);
+    status = pjmedia_snd_init(&cp.factory);
     if (status != PJ_SUCCESS) {
     	app_perror("pjmedia_snd_init()", status);
         pj_caching_pool_destroy(&cp);
     	pj_shutdown();
     	return status;
     }
-
-    count = pjmedia_aud_dev_count();
+    
+    count = pjmedia_snd_get_dev_count();
     PJ_LOG(3,(THIS_FILE, "Device count: %d", count));
     for (i=0; i<count; ++i) {
-    	pjmedia_aud_dev_info info;
-    	pj_status_t status;
-
-    	status = pjmedia_aud_dev_get_info(i, &info);
-    	pj_assert(status == PJ_SUCCESS);
+    	const pjmedia_snd_dev_info *info;
+    	
+    	info = pjmedia_snd_get_dev_info(i);
     	PJ_LOG(3, (THIS_FILE, "%d: %s %d/%d %dHz",
-    		   i, info.name, info.input_count, info.output_count,
-    		   info.default_samples_per_sec));
+    		   i, info->name, info->input_count, info->output_count,
+    		   info->default_samples_per_sec));	
     }
 
     /* Create pool */
@@ -117,8 +114,8 @@ static pj_status_t app_init()
     }
 
     /* Init delay buffer */
-    status = pjmedia_delay_buf_create(pool, THIS_FILE, CLOCK_RATE,
-				      SAMPLES_PER_FRAME, CHANNEL_COUNT,
+    status = pjmedia_delay_buf_create(pool, THIS_FILE, CLOCK_RATE, 
+				      SAMPLES_PER_FRAME, CHANNEL_COUNT, 
 				      0, 0, &delaybuf);
     if (status != PJ_SUCCESS) {
     	app_perror("pjmedia_delay_buf_create()", status);
@@ -126,22 +123,26 @@ static pj_status_t app_init()
     	//pj_shutdown();
     	//return status;
     }
-
+    
     return PJ_SUCCESS;
 }
 
 
 /* Sound capture callback */
-static pj_status_t rec_cb(void *user_data,
-			  pjmedia_frame *frame)
+static pj_status_t rec_cb(void *user_data, 
+			  pj_uint32_t timestamp,
+			  void *input,
+			  unsigned size) 
 {
     PJ_UNUSED_ARG(user_data);
+    PJ_UNUSED_ARG(timestamp);
+    PJ_UNUSED_ARG(size);
 
-    pjmedia_delay_buf_put(delaybuf, (pj_int16_t*)frame->buf);
+    pjmedia_delay_buf_put(delaybuf, (pj_int16_t*)input);
 
-    if (frame->size != SAMPLES_PER_FRAME*2) {
+    if (size != SAMPLES_PER_FRAME*2) {
 		PJ_LOG(3, (THIS_FILE, "Size captured = %u",
-	 		   frame->size));
+	 		   size));
     }
 
     ++rec_cnt;
@@ -150,36 +151,43 @@ static pj_status_t rec_cb(void *user_data,
 
 /* Play cb */
 static pj_status_t play_cb(void *user_data,
-			   pjmedia_frame *frame)
+			   pj_uint32_t timestamp,
+			   void *output,
+			   unsigned size) 
 {
     PJ_UNUSED_ARG(user_data);
-
-    pjmedia_delay_buf_get(delaybuf, (pj_int16_t*)frame->buf);
-    frame->size = SAMPLES_PER_FRAME*2;
-    frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
-
+    PJ_UNUSED_ARG(timestamp);
+    PJ_UNUSED_ARG(size);
+    
+    pjmedia_delay_buf_get(delaybuf, (pj_int16_t*)output);
+    
     ++play_cnt;
-    return PJ_SUCCESS;
+    return PJ_SUCCESS;	
 }
 
 /* Start sound */
-static pj_status_t snd_start(unsigned flag)
+static pj_status_t snd_start(unsigned flag) 
 {
-    pjmedia_aud_param param;
     pj_status_t status;
-
+    
     if (strm != NULL) {
     	app_perror("snd already open", PJ_EINVALIDOP);
     	return PJ_EINVALIDOP;
     }
-
-    pjmedia_aud_dev_default_param(0, &param);
-    param.channel_count = CHANNEL_COUNT;
-    param.clock_rate = CLOCK_RATE;
-    param.samples_per_frame = SAMPLES_PER_FRAME;
-    param.dir = (pjmedia_dir) flag;
-
-    status = pjmedia_aud_stream_create(&param, &rec_cb, &play_cb, NULL, &strm);
+    
+    if (flag==PJMEDIA_DIR_CAPTURE_PLAYBACK)
+    	status = pjmedia_snd_open(-1, -1, CLOCK_RATE, CHANNEL_COUNT,
+    				  SAMPLES_PER_FRAME, BITS_PER_SAMPLE,
+    				  &rec_cb, &play_cb, NULL, &strm);
+    else if (flag==PJMEDIA_DIR_CAPTURE)
+    	status = pjmedia_snd_open_rec(-1, CLOCK_RATE, CHANNEL_COUNT,
+    				      SAMPLES_PER_FRAME, BITS_PER_SAMPLE,
+    				      &rec_cb, NULL, &strm);
+    else
+    	status = pjmedia_snd_open_player(-1, CLOCK_RATE, CHANNEL_COUNT,
+    					 SAMPLES_PER_FRAME, BITS_PER_SAMPLE,
+    					 &play_cb, NULL, &strm);
+			 
     if (status != PJ_SUCCESS) {
     	app_perror("snd open", status);
     	return status;
@@ -190,10 +198,10 @@ static pj_status_t snd_start(unsigned flag)
 
     pjmedia_delay_buf_reset(delaybuf);
 
-    status = pjmedia_aud_stream_start(strm);
+    status = pjmedia_snd_stream_start(strm);
     if (status != PJ_SUCCESS) {
     	app_perror("snd start", status);
-    	pjmedia_aud_stream_destroy(strm);
+    	pjmedia_snd_stream_close(strm);
     	strm = NULL;
     	return status;
     }
@@ -202,23 +210,19 @@ static pj_status_t snd_start(unsigned flag)
 }
 
 /* Stop sound */
-static pj_status_t snd_stop()
+static pj_status_t snd_stop() 
 {
     pj_time_val now;
     pj_status_t status;
-
+    
     if (strm == NULL) {
     	app_perror("snd not open", PJ_EINVALIDOP);
     	return PJ_EINVALIDOP;
     }
-
-    status = pjmedia_aud_stream_stop(strm);
-    if (status != PJ_SUCCESS) {
-    	app_perror("snd failed to stop", status);
-    }
-    status = pjmedia_aud_stream_destroy(strm);
+    
+    status = pjmedia_snd_stream_close(strm);
     strm = NULL;
-
+    
     pj_gettimeofday(&now);
     PJ_TIME_VAL_SUB(now, t_start);
 
@@ -230,12 +234,12 @@ static pj_status_t snd_stop()
 }
 
 /* Shutdown application */
-static void app_fini()
+static void app_fini() 
 {
     if (strm)
     	snd_stop();
-
-    pjmedia_aud_subsys_shutdown();
+    
+    pjmedia_snd_deinit();
     pjmedia_delay_buf_destroy(delaybuf);
     pj_pool_release(pool);
     pj_caching_pool_destroy(&cp);
@@ -249,55 +253,56 @@ static void app_fini()
  */
 #include <e32base.h>
 
-class ConsoleUI : public CActive
+class ConsoleUI : public CActive 
 {
 public:
-    ConsoleUI(CConsoleBase *con);
+    ConsoleUI(CActiveSchedulerWait *asw, CConsoleBase *con);
 
     // Run console UI
     void Run();
 
     // Stop
     void Stop();
-
+    
 protected:
     // Cancel asynchronous read.
     void DoCancel();
 
     // Implementation: called when read has completed.
     void RunL();
-
+    
 private:
+    CActiveSchedulerWait *asw_;
     CConsoleBase *con_;
 };
 
 
-ConsoleUI::ConsoleUI(CConsoleBase *con)
-: CActive(EPriorityUserInput), con_(con)
+ConsoleUI::ConsoleUI(CActiveSchedulerWait *asw, CConsoleBase *con) 
+: CActive(EPriorityHigh), asw_(asw), con_(con)
 {
     CActiveScheduler::Add(this);
 }
 
 // Run console UI
-void ConsoleUI::Run()
+void ConsoleUI::Run() 
 {
     con_->Read(iStatus);
     SetActive();
 }
 
 // Stop console UI
-void ConsoleUI::Stop()
+void ConsoleUI::Stop() 
 {
     DoCancel();
 }
 
 // Cancel asynchronous read.
-void ConsoleUI::DoCancel()
+void ConsoleUI::DoCancel() 
 {
     con_->ReadCancel();
 }
 
-static void PrintMenu()
+static void PrintMenu() 
 {
     PJ_LOG(3, (THIS_FILE, "\n\n"
 	    "Menu:\n"
@@ -309,15 +314,14 @@ static void PrintMenu()
 }
 
 // Implementation: called when read has completed.
-void ConsoleUI::RunL()
+void ConsoleUI::RunL() 
 {
     TKeyCode kc = con_->KeyCode();
     pj_bool_t reschedule = PJ_TRUE;
-
+    
     switch (kc) {
     case 'w':
-	    snd_stop();
-	    CActiveScheduler::Stop();
+	    asw_->AsyncStop();
 	    reschedule = PJ_FALSE;
 	    break;
     case 'a':
@@ -339,28 +343,30 @@ void ConsoleUI::RunL()
     }
 
     PrintMenu();
-
+    
     if (reschedule)
 	Run();
 }
 
 
 ////////////////////////////////////////////////////////////////////////////
-int app_main()
+int app_main() 
 {
     if (app_init() != PJ_SUCCESS)
         return -1;
-
+    
     // Run the UI
-    ConsoleUI *con = new ConsoleUI(console);
-
+    CActiveSchedulerWait *asw = new CActiveSchedulerWait;
+    ConsoleUI *con = new ConsoleUI(asw, console);
+    
     con->Run();
-
+    
     PrintMenu();
-    CActiveScheduler::Start();
-
+    asw->Start();
+    
     delete con;
-
+    delete asw;
+    
     app_fini();
     return 0;
 }

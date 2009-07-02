@@ -105,16 +105,16 @@ static pj_str_t evsub_state_names[] =
  */
 
 /* Number of seconds to send SUBSCRIBE before the actual expiration */
-#define TIME_UAC_REFRESH	PJSIP_EVSUB_TIME_UAC_REFRESH
+#define TIME_UAC_REFRESH	5
 
 /* Time to wait for the final NOTIFY after sending unsubscription */
-#define TIME_UAC_TERMINATE	PJSIP_EVSUB_TIME_UAC_TERMINATE
+#define TIME_UAC_TERMINATE	5
 
 /* If client responds NOTIFY with non-2xx final response (such as 401),
  * wait for this seconds for further NOTIFY, otherwise client will
  * unsubscribe
  */
-#define TIME_UAC_WAIT_NOTIFY	PJSIP_EVSUB_TIME_UAC_WAIT_NOTIFY
+#define TIME_UAC_WAIT_NOTIFY	5
 
 
 /*
@@ -1378,21 +1378,10 @@ static pjsip_evsub *on_new_transaction( pjsip_transaction *tsx,
 	dlgsub = dlgsub->next;
     }
 
-    /* Note: 
-     *  the second condition is for http://trac.pjsip.org/repos/ticket/911 
-     */
-    if (dlgsub == dlgsub_head ||
-	(dlgsub->sub && 
-	    pjsip_evsub_get_state(dlgsub->sub)==PJSIP_EVSUB_STATE_TERMINATED))
-    {
-	const char *reason_msg = 
-	    (dlgsub == dlgsub_head ? "Subscription Does Not Exist" :
-	     "Subscription already terminated");
-
+    if (dlgsub == dlgsub_head) {
 	/* This could be incoming request to create new subscription */
 	PJ_LOG(4,(THIS_FILE, 
-		  "%s for %.*s, event=%.*s;id=%.*s",
-		  reason_msg,
+		  "Subscription not found for %.*s, event=%.*s;id=%.*s",
 		  (int)tsx->method.name.slen,
 		  tsx->method.name.ptr,
 		  (int)event_hdr->event_type.slen,
@@ -1404,11 +1393,10 @@ static pjsip_evsub *on_new_transaction( pjsip_transaction *tsx,
 	if (tsx->state == PJSIP_TSX_STATE_TRYING &&
 	    pjsip_method_cmp(&tsx->method, &pjsip_notify_method)==0)
 	{
-	    pj_str_t reason;
+	    pj_str_t reason = pj_str("Subscription Does Not Exist");
 	    pjsip_tx_data *tdata;
 	    pj_status_t status;
 
-	    pj_cstr(&reason, reason_msg);
 	    status = pjsip_dlg_create_response(dlg, 
 					       event->body.tsx_state.src.rdata, 
 					       481, &reason, 

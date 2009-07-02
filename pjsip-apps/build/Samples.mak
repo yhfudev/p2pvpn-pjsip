@@ -11,12 +11,10 @@ export _LDFLAGS := $(PJ_LDFLAGS) $(PJ_LDLIBS) $(LDFLAGS)
 
 SRCDIR := ../src/samples
 OBJDIR := ./output/samples-$(TARGET_NAME)
-BINDIR := ../bin/samples/$(TARGET_NAME)
+BINDIR := ../bin/samples
 
-SAMPLES := auddemo \
-	   confsample \
+SAMPLES := confsample \
 	   encdec \
-	   icedemo \
 	   latency \
 	   level \
 	   mix \
@@ -30,6 +28,8 @@ SAMPLES := auddemo \
 	   simple_pjsua \
 	   siprtp \
 	   sipstateless \
+	   sndinfo \
+	   sndtest \
 	   stateful_proxy \
 	   stateless_proxy \
 	   stereotest \
@@ -37,11 +37,11 @@ SAMPLES := auddemo \
 	   strerror \
 	   tonegen
 
-EXES := $(foreach file, $(SAMPLES), $(BINDIR)/$(file)$(HOST_EXE))
+EXES := $(foreach file, $(SAMPLES), $(BINDIR)/$(file)-$(TARGET_NAME)$(HOST_EXE))
 
-all: $(BINDIR) $(OBJDIR) $(EXES)
+all: $(OBJDIR) $(EXES)
 
-$(BINDIR)/%$(HOST_EXE): $(OBJDIR)/%$(OBJEXT) $(PJ_LIB_FILES)
+$(BINDIR)/%-$(TARGET_NAME)$(HOST_EXE): $(OBJDIR)/%$(OBJEXT) $(PJ_LIB_FILES)
 	$(LD) $(LDOUT)$(subst /,$(HOST_PSEP),$@) \
 	    $(subst /,$(HOST_PSEP),$<) \
 	    $(_LDFLAGS)
@@ -54,16 +54,12 @@ $(OBJDIR)/%$(OBJEXT): $(SRCDIR)/%.c
 $(OBJDIR):
 	$(subst @@,$(subst /,$(HOST_PSEP),$@),$(HOST_MKDIR)) 
 
-$(BINDIR):
-	$(subst @@,$(subst /,$(HOST_PSEP),$@),$(HOST_MKDIR)) 
-
 depend:
 
 clean:
 	$(subst @@,$(subst /,$(HOST_PSEP),$(OBJDIR)/*),$(HOST_RMR))
 	$(subst @@,$(subst /,$(HOST_PSEP),$(OBJDIR)),$(HOST_RMDIR))
 	$(subst @@,$(EXES),$(HOST_RM))
-	rm -rf $(BINDIR)
 
 distclean realclean: clean
 #	$(subst @@,$(subst /,$(HOST_PSEP),$(EXES)) $(subst /,$(HOST_PSEP),$(EXES)),$(HOST_RM))

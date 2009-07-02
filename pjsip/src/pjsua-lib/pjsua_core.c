@@ -177,13 +177,8 @@ PJ_DEF(void) pjsua_media_config_default(pjsua_media_config *cfg)
     cfg->quality = PJSUA_DEFAULT_CODEC_QUALITY;
     cfg->ilbc_mode = PJSUA_DEFAULT_ILBC_MODE;
     cfg->ec_tail_len = PJSUA_DEFAULT_EC_TAIL_LEN;
-    cfg->snd_rec_latency = PJMEDIA_SND_DEFAULT_REC_LATENCY;
-    cfg->snd_play_latency = PJMEDIA_SND_DEFAULT_PLAY_LATENCY;
     cfg->jb_init = cfg->jb_min_pre = cfg->jb_max_pre = cfg->jb_max = -1;
-    cfg->snd_auto_close_time = 1;
-
-    cfg->ice_max_host_cands = -1;
-    pj_ice_sess_options_default(&cfg->ice_opt);
+    cfg->snd_auto_close_time = -1;
 
     cfg->turn_conn_type = PJ_TURN_TP_UDP;
 }
@@ -479,11 +474,10 @@ PJ_DEF(pj_status_t) pjsua_reconfigure_logging(const pjsua_logging_config *cfg)
 
     /* If output log file is desired, create the file: */
     if (pjsua_var.log_cfg.log_filename.slen) {
-	unsigned flags = PJ_O_WRONLY;
-	flags |= pjsua_var.log_cfg.log_file_flags;
+
 	status = pj_file_open(pjsua_var.pool, 
 			      pjsua_var.log_cfg.log_filename.ptr,
-			      flags, 
+			      PJ_O_WRONLY, 
 			      &pjsua_var.log_file);
 
 	if (status != PJ_SUCCESS) {
@@ -587,8 +581,7 @@ PJ_DEF(pj_status_t) pjsua_create(void)
     PJ_ASSERT_RETURN(status == PJ_SUCCESS, status);
 
     /* Set default sound device ID */
-    pjsua_var.cap_dev = PJMEDIA_AUD_DEFAULT_CAPTURE_DEV;
-    pjsua_var.play_dev = PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV;
+    pjsua_var.cap_dev = pjsua_var.play_dev = -1;
 
     /* Init caching pool. */
     pj_caching_pool_init(&pjsua_var.cp, NULL, 0);
@@ -871,16 +864,34 @@ static void stun_dns_srv_resolver_cb(void *user_data,
 	 * it with gethostbyname()
 	 */
 	if (pjsua_var.ua_cfg.stun_host.slen) {
-	    pjsua_var.stun_status = 
-		pj_sockaddr_parse(pj_AF_INET(), 0,
-				  &pjsua_var.ua_cfg.stun_host,
-				  &pjsua_var.stun_srv);
-	    if (pjsua_var.stun_status != PJ_SUCCESS) {
-		pjsua_perror(THIS_FILE, "Invalid STUN server", 
-			     pjsua_var.stun_status);
+	    pj_str_t str_host, str_port;
+	    int port;
+	    pj_hostent he;
+
+	    str_port.ptr = pj_strchr(&pjsua_var.ua_cfg.stun_host, ':');
+	    if (str_port.ptr != NULL) {
+		str_host.ptr = pjsua_var.ua_cfg.stun_host.ptr;
+		str_host.slen = (str_port.ptr - str_host.ptr);
+		str_port.ptr++;
+		str_port.slen = pjsua_var.ua_cfg.stun_host.slen - 
+				str_host.slen - 1;
+		port = (int)pj_strtoul(&str_port);
+		if (port < 1 || port > 65535) {
+		    pjsua_perror(THIS_FILE, "Invalid STUN server", PJ_EINVAL);
+		    pjsua_var.stun_status = PJ_EINVAL;
+		    return;
+		}
 	    } else {
-		if (pj_sockaddr_get_port(&pjsua_var.stun_srv)==0)
-		    pj_sockaddr_set_port(&pjsua_var.stun_srv, 3478);
+		str_host = pjsua_var.ua_cfg.stun_host;
+		port = 3478;
+	    }
+
+	    pjsua_var.stun_status = pj_gethostbyname(&str_host, &he);
+
+	    if (pjsua_var.stun_status == PJ_SUCCESS) {
+		pj_sockaddr_in_init(&pjsua_var.stun_srv.ipv4, NULL, 0);
+		pjsua_var.stun_srv.ipv4.sin_addr = *(pj_in_addr*)he.h_addr;
+		pjsua_var.stun_srv.ipv4.sin_port = pj_htons((pj_uint16_t)port);
 
 		PJ_LOG(3,(THIS_FILE, 
 			  "STUN server %.*s resolved, address is %s:%d",
@@ -970,18 +981,41 @@ pj_status_t pjsua_resolve_stun_server(pj_bool_t wait)
 	 * gethostbyname().
 	 */
 	else if (pjsua_var.ua_cfg.stun_host.slen) {
-	    pjsua_var.stun_status = 
-		pj_sockaddr_parse(pj_AF_INET(), 0,
-				  &pjsua_var.ua_cfg.stun_host,
-				  &pjsua_var.stun_srv);
-	    if (pjsua_var.stun_status != PJ_SUCCESS) {
-		pjsua_perror(THIS_FILE, "Invalid STUN server", 
-					pjsua_var.stun_status);
-		return pjsua_var.stun_status;
+	    pj_str_t str_host, str_port;
+	    int port;
+	    pj_hostent he;
+
+	    str_port.ptr = pj_strchr(&pjsua_var.ua_cfg.stun_host, ':');
+	    if (str_port.ptr != NULL) {
+		str_host.ptr = pjsua_var.ua_cfg.stun_host.ptr;
+		str_host.slen = (str_port.ptr - str_host.ptr);
+		str_port.ptr++;
+		str_port.slen = pjsua_var.ua_cfg.stun_host.slen - 
+				str_host.slen - 1;
+		port = (int)pj_strtoul(&str_port);
+		if (port < 1 || port > 65535) {
+		    pjsua_perror(THIS_FILE, "Invalid STUN server", PJ_EINVAL);
+		    pjsua_var.stun_status = PJ_EINVAL;
+		    return pjsua_var.stun_status;
+		}
+	    } else {
+		str_host = pjsua_var.ua_cfg.stun_host;
+		port = 3478;
 	    }
 
-	    if (pj_sockaddr_get_port(&pjsua_var.stun_srv)==0)
-		pj_sockaddr_set_port(&pjsua_var.stun_srv, 3478);
+	    pjsua_var.stun_status = 
+		pj_sockaddr_in_init(&pjsua_var.stun_srv.ipv4, &str_host, 
+				    (pj_uint16_t)port);
+
+	    if (pjsua_var.stun_status != PJ_SUCCESS) {
+		pjsua_var.stun_status = pj_gethostbyname(&str_host, &he);
+
+		if (pjsua_var.stun_status == PJ_SUCCESS) {
+		    pj_sockaddr_in_init(&pjsua_var.stun_srv.ipv4, NULL, 0);
+		    pjsua_var.stun_srv.ipv4.sin_addr = *(pj_in_addr*)he.h_addr;
+		    pjsua_var.stun_srv.ipv4.sin_port = pj_htons((pj_uint16_t)port);
+		}
+	    }
 
 	    PJ_LOG(3,(THIS_FILE, 
 		      "STUN server %.*s resolved, address is %s:%d",

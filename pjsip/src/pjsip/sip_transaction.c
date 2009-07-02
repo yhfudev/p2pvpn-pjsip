@@ -23,7 +23,6 @@
 #include <pjsip/sip_endpoint.h>
 #include <pjsip/sip_errno.h>
 #include <pjsip/sip_event.h>
-#include <pjlib-util/errno.h>
 #include <pj/hash.h>
 #include <pj/pool.h>
 #include <pj/os.h>
@@ -145,13 +144,6 @@ static pj_time_val timeout_timer_val = { (64*PJSIP_T1_TIMEOUT)/1000,
 
 #define TIMER_INACTIVE	0
 #define TIMER_ACTIVE	1
-
-/* Delay for 1xx retransmission (should be 60 seconds).
- * Specify 0 to disable this feature
- */
-#ifndef PJSIP_TSX_1XX_RETRANS_DELAY
-#   define PJSIP_TSX_1XX_RETRANS_DELAY    60
-#endif
 
 
 /* Prototypes. */
@@ -1697,12 +1689,8 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	    tsx->transport = NULL;
 	}
 
-	/* Also stop processing if transaction has been flagged with
-	 * pending destroy (http://trac.pjsip.org/repos/ticket/906)
-	 */
-	if ((!*cont) || (tsx->transport_flag & TSX_HAS_PENDING_DESTROY)) {
+	if (!*cont) {
 	    char errmsg[PJ_ERR_MSG_SIZE];
-	    pjsip_status_code sc;
 	    pj_str_t err;
 
 	    tsx->transport_err = -sent;
@@ -1720,29 +1708,12 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	    /* Mark that we have resolved the addresses. */
 	    tsx->transport_flag |= TSX_HAS_RESOLVED_SERVER;
 
-	    /* Server resolution error is now mapped to 502 instead of 503,
-	     * since with 503 normally client should try again.
-	     * See http://trac.pjsip.org/repos/ticket/870
-	     */
-	    if (-sent==PJ_ERESOLVE || -sent==PJLIB_UTIL_EDNS_NXDOMAIN)
-		sc = PJSIP_SC_BAD_GATEWAY;
-	    else
-		sc = PJSIP_SC_TSX_TRANSPORT_ERROR;
-
 	    /* Terminate transaction, if it's not already terminated. */
-	    tsx_set_status_code(tsx, sc, &err);
+	    tsx_set_status_code(tsx, PJSIP_SC_TSX_TRANSPORT_ERROR, &err);
 	    if (tsx->state != PJSIP_TSX_STATE_TERMINATED &&
 		tsx->state != PJSIP_TSX_STATE_DESTROYED)
 	    {
 		tsx_set_state( tsx, PJSIP_TSX_STATE_TERMINATED, 
-			       PJSIP_EVENT_TRANSPORT_ERROR, send_state->tdata);
-	    } 
-	    /* Don't forget to destroy if we have pending destroy flag
-	     * (http://trac.pjsip.org/repos/ticket/906)
-	     */
-	    else if (tsx->transport_flag & TSX_HAS_PENDING_DESTROY)
-	    {
-		tsx_set_state( tsx, PJSIP_TSX_STATE_DESTROYED, 
 			       PJSIP_EVENT_TRANSPORT_ERROR, send_state->tdata);
 	    }
 
@@ -1754,19 +1725,6 @@ static void send_msg_callback( pjsip_send_state *send_state,
 		      "will try next server. Err=%d (%s)",
 		      pjsip_tx_data_get_info(send_state->tdata), -sent,
 		      pj_strerror(-sent, errmsg, sizeof(errmsg)).ptr));
-
-	    /* Reset retransmission count */
-	    tsx->retransmit_count = 0;
-
-	    /* And reset timeout timer */
-	    if (tsx->timeout_timer.id) {
-		pjsip_endpt_cancel_timer(tsx->endpt, &tsx->timeout_timer);
-		tsx->timeout_timer.id = TIMER_INACTIVE;
-
-		tsx->timeout_timer.id = TIMER_ACTIVE;
-		pjsip_endpt_schedule_timer( tsx->endpt, &tsx->timeout_timer, 
-					    &timeout_timer_val);
-	    }
 	}
     }
 
@@ -1967,7 +1925,7 @@ PJ_DEF(pj_status_t) pjsip_tsx_retransmit_no_state(pjsip_transaction *tsx,
 static void tsx_resched_retransmission( pjsip_transaction *tsx )
 {
     pj_time_val timeout;
-    pj_uint32_t msec_time;
+    unsigned msec_time;
 
     pj_assert((tsx->transport_flag & TSX_HAS_PENDING_TRANSPORT) == 0);
 
@@ -1985,18 +1943,10 @@ static void tsx_resched_retransmission( pjsip_transaction *tsx )
 	    msec_time = pjsip_cfg()->tsx.t2;
 	}
     } else {
-	/* For UAS, this can be retransmission of 2xx response for INVITE
-	 * or non-100 1xx response.
-	 */
-	if (tsx->status_code < 200) {
-	    /* non-100 1xx retransmission is at 60 seconds */
-	    msec_time = PJSIP_TSX_1XX_RETRANS_DELAY * 1000;
-	} else {
-	    /* Retransmission of INVITE final response also caps-off at T2 */
-	    pj_assert(tsx->status_code >= 200);
-	    if (msec_time > pjsip_cfg()->tsx.t2)
-		msec_time = pjsip_cfg()->tsx.t2;
-	}
+	/* Retransmission of INVITE final response also caps-off at T2 */
+	pj_assert(tsx->status_code >= 200);
+	if (msec_time > pjsip_cfg()->tsx.t2)
+	    msec_time = pjsip_cfg()->tsx.t2;
     }
 
     timeout.sec = msec_time / 1000;
@@ -2364,41 +2314,7 @@ static pj_status_t tsx_on_state_proceeding_uas( pjsip_transaction *tsx,
 	    tsx_set_state( tsx, PJSIP_TSX_STATE_PROCEEDING, 
                            PJSIP_EVENT_TX_MSG, tdata );
 
-	    /* Retransmit provisional response every 1 minute if this is
-	     * an INVITE provisional response greater than 100.
-	     */
-	    if (PJSIP_TSX_1XX_RETRANS_DELAY > 0 && 
-		tsx->method.id==PJSIP_INVITE_METHOD && tsx->status_code>100)
-	    {
-
-		/* Stop 1xx retransmission timer, if any */
-		if (tsx->retransmit_timer.id) {
-		    pjsip_endpt_cancel_timer(tsx->endpt, 
-					     &tsx->retransmit_timer);
-		    tsx->retransmit_timer.id = 0;
-		}
-
-		/* Schedule retransmission */
-		tsx->retransmit_count = 0;
-		if (tsx->transport_flag & TSX_HAS_PENDING_TRANSPORT) {
-		    tsx->transport_flag |= TSX_HAS_PENDING_RESCHED;
-		} else {
-		    pj_time_val delay = {PJSIP_TSX_1XX_RETRANS_DELAY, 0};
-
-		    tsx->retransmit_timer.id = TIMER_ACTIVE;
-		    pjsip_endpt_schedule_timer( tsx->endpt, 
-						&tsx->retransmit_timer,
-						&delay);
-		}
-	    }
-
 	} else if (PJSIP_IS_STATUS_IN_CLASS(tsx->status_code, 200)) {
-
-	    /* Stop 1xx retransmission timer, if any */
-	    if (tsx->retransmit_timer.id) {
-		pjsip_endpt_cancel_timer(tsx->endpt, &tsx->retransmit_timer);
-		tsx->retransmit_timer.id = 0;
-	    }
 
 	    if (tsx->method.id == PJSIP_INVITE_METHOD && tsx->handle_200resp==0) {
 
@@ -2468,12 +2384,6 @@ static pj_status_t tsx_on_state_proceeding_uas( pjsip_transaction *tsx,
 	    }
 
 	} else if (tsx->status_code >= 300) {
-
-	    /* Stop 1xx retransmission timer, if any */
-	    if (tsx->retransmit_timer.id) {
-		pjsip_endpt_cancel_timer(tsx->endpt, &tsx->retransmit_timer);
-		tsx->retransmit_timer.id = 0;
-	    }
 
 	    /* 3xx-6xx class message causes transaction to move to 
              * "Completed" state. 

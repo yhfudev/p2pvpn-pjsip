@@ -568,10 +568,6 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
     int rport;
     pjsip_sip_uri *uri;
     pjsip_via_hdr *via;
-    pj_sockaddr contact_addr;
-    pj_sockaddr recv_addr;
-    pj_status_t status;
-    pj_bool_t matched;
     pj_str_t srv_ip;
 
     tp = param->rdata->tp_info.transport;
@@ -630,25 +626,9 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 	uri->port = pjsip_transport_get_default_port_for_type(tp_type);
     }
 
-    /* Convert IP address strings into sockaddr for comparison.
-     * (http://trac.pjsip.org/repos/ticket/863)
-     */
-    status = pj_sockaddr_parse(pj_AF_UNSPEC(), 0, &uri->host, 
-			       &contact_addr);
-    if (status == PJ_SUCCESS)
-	status = pj_sockaddr_parse(pj_AF_UNSPEC(), 0, via_addr, 
-				   &recv_addr);
-    if (status == PJ_SUCCESS) {
-	/* Compare the addresses as sockaddr according to the ticket above */
-	matched = (uri->port == rport &&
-		   pj_sockaddr_cmp(&contact_addr, &recv_addr)==0);
-    } else {
-	/* Compare the addresses as string, as before */
-	matched = (uri->port == rport &&
-		   pj_stricmp(&uri->host, via_addr)==0);
-    }
-
-    if (matched) {
+    if (uri->port == rport &&
+	pj_stricmp(&uri->host, via_addr)==0)
+    {
 	/* Address doesn't change */
 	pj_pool_release(pool);
 	return PJ_FALSE;
@@ -663,8 +643,7 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 
     /* Do not switch if both Contact and server's IP address are
      * public but response contains private IP. A NAT in the middle
-     * might have messed up with the SIP packets. See:
-     * http://trac.pjsip.org/repos/ticket/643
+     * might have messed up with the SIP packets.
      *
      * This exception can be disabled by setting allow_contact_rewrite
      * to 2. In this case, the switch will always be done whenever there
@@ -699,27 +678,16 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
     /* Update account's Contact header */
     {
 	char *tmp;
-	const char *beginquote, *endquote;
 	int len;
-
-	/* Enclose IPv6 address in square brackets */
-	if (tp->key.type & PJSIP_TRANSPORT_IPV6) {
-	    beginquote = "[";
-	    endquote = "]";
-	} else {
-	    beginquote = endquote = "";
-	}
 
 	tmp = (char*) pj_pool_alloc(pool, PJSIP_MAX_URL_SIZE);
 	len = pj_ansi_snprintf(tmp, PJSIP_MAX_URL_SIZE,
-			       "<sip:%.*s%s%s%.*s%s:%d;transport=%s%.*s>",
+			       "<sip:%.*s%s%.*s:%d;transport=%s%.*s>",
 			       (int)acc->user_part.slen,
 			       acc->user_part.ptr,
 			       (acc->user_part.slen? "@" : ""),
-			       beginquote,
 			       (int)via_addr->slen,
 			       via_addr->ptr,
-			       endquote,
 			       rport,
 			       tp->type_name,
 			       (int)acc->cfg.contact_params.slen,

@@ -1460,14 +1460,12 @@ static int offer_answer_test(pj_pool_t *pool, pjmedia_sdp_neg **p_neg,
 		return -210;
 	    }
 	} else if (neg) {
-	    const pjmedia_sdp_session *lsdp;
-	    status = pjmedia_sdp_neg_get_active_local(neg, &lsdp);
+	    status = pjmedia_sdp_neg_get_active_local(neg, &sdp2);
 	    if (status != PJ_SUCCESS) {
 		app_perror(status, 
 			   "   error: pjmedia_sdp_neg_get_active_local");
 		return -215;
 	    }
-	    sdp2 = (pjmedia_sdp_session*)lsdp;
 	}
 
 	if (neg == NULL) {

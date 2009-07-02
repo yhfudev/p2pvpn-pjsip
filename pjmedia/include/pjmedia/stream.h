@@ -26,6 +26,7 @@
  * @brief Media Stream.
  */
 
+#include <pjmedia/sound.h>
 #include <pjmedia/codec.h>
 #include <pjmedia/endpoint.h>
 #include <pjmedia/port.h>

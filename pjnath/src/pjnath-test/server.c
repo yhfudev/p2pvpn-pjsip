@@ -310,8 +310,8 @@ static pj_stun_msg* create_success_response(test_server *test_srv,
     /* Add LIFETIME */
     pj_stun_msg_add_uint_attr(pool, resp, PJ_STUN_ATTR_LIFETIME, lifetime);
     if (lifetime != 0) {
-	/* Add XOR-RELAYED-ADDRESS */
-	pj_stun_msg_add_sockaddr_attr(pool, resp, PJ_STUN_ATTR_XOR_RELAYED_ADDR, PJ_TRUE, &alloc->alloc_addr,
+	/* Add RELAYED-ADDRESS */
+	pj_stun_msg_add_sockaddr_attr(pool, resp, PJ_STUN_ATTR_RELAYED_ADDR, PJ_TRUE, &alloc->alloc_addr,
 				      pj_sockaddr_get_len(&alloc->alloc_addr));
 	/* Add XOR-MAPPED-ADDRESS */
 	pj_stun_msg_add_sockaddr_attr(pool, resp, PJ_STUN_ATTR_XOR_MAPPED_ADDR, PJ_TRUE, &alloc->client_addr,
@@ -353,61 +353,6 @@ static pj_bool_t turn_on_data_recvfrom(pj_activesock_t *asock,
     test_srv = (test_server*) pj_activesock_get_user_data(asock);
     pool = pj_pool_create(test_srv->stun_cfg->pf, NULL, 512, 512, NULL);
 
-    /* Find the client */
-    for (i=0; i<test_srv->turn_alloc_cnt; i++) {
-	if (pj_sockaddr_cmp(&test_srv->turn_alloc[i].client_addr, src_addr)==0)
-	    break;
-    }
-
-
-    if (pj_stun_msg_check((pj_uint8_t*)data, size, PJ_STUN_NO_FINGERPRINT_CHECK)!=PJ_SUCCESS)  {
-	/* Not STUN message, this probably is a ChannelData */
-	pj_turn_channel_data cd;
-	const pj_turn_channel_data *pcd = (const pj_turn_channel_data*)data;
-	pj_ssize_t sent;
-
-	if (i==test_srv->turn_alloc_cnt) {
-	    /* Invalid data */
-	    PJ_LOG(1,(THIS_FILE, 
-		      "TURN Server received strayed data"));
-	    goto on_return;
-	}
-
-	alloc = &test_srv->turn_alloc[i];
-
-	cd.ch_number = pj_ntohs(pcd->ch_number);
-	cd.length = pj_ntohs(pcd->length);
-
-	/* For UDP check the packet length */
-	if (size < cd.length+sizeof(cd)) {
-	    PJ_LOG(1,(THIS_FILE, 
-		      "TURN Server: ChannelData discarded: UDP size error"));
-	    goto on_return;
-	}
-
-	/* Lookup peer */
-	for (i=0; i<alloc->perm_cnt; ++i) {
-	    if (alloc->chnum[i] == cd.ch_number)
-		break;
-	}
-
-	if (i==alloc->perm_cnt) {
-	    PJ_LOG(1,(THIS_FILE, 
-		      "TURN Server: ChannelData discarded: invalid channel number"));
-	    goto on_return;
-	}
-
-	/* Relay the data to peer */
-	sent = cd.length;
-	pj_activesock_sendto(alloc->sock, &alloc->send_key,
-			     pcd+1, &sent, 0,
-			     &alloc->perm[i],
-			     pj_sockaddr_get_len(&alloc->perm[i]));
-
-	/* Done */
-	goto on_return;
-    }
-
     status = pj_stun_msg_decode(pool, (pj_uint8_t*)data, size, 
 				PJ_STUN_IS_DATAGRAM | PJ_STUN_CHECK_PACKET |
 				    PJ_STUN_NO_FINGERPRINT_CHECK, 
@@ -417,6 +362,12 @@ static pj_bool_t turn_on_data_recvfrom(pj_activesock_t *asock,
 	pj_strerror(status, errmsg, sizeof(errmsg));
 	PJ_LOG(1,("", "STUN message decode error from client %s: %s", client_info, errmsg));
 	goto on_return;
+    }
+
+    /* Find the client */
+    for (i=0; i<test_srv->turn_alloc_cnt; i++) {
+	if (pj_sockaddr_cmp(&test_srv->turn_alloc[i].client_addr, src_addr)==0)
+	    break;
     }
 
     if (i==test_srv->turn_alloc_cnt) {
@@ -515,7 +466,7 @@ static pj_bool_t turn_on_data_recvfrom(pj_activesock_t *asock,
 	    goto send_pkt;
 	}
 	pj_stun_msg_add_sockaddr_attr(alloc->pool, alloc->data_ind, 
-				      PJ_STUN_ATTR_XOR_PEER_ADDR, PJ_TRUE,
+				      PJ_STUN_ATTR_PEER_ADDR, PJ_TRUE,
 				      &alloc->alloc_addr,
 				      pj_sockaddr_get_len(&alloc->alloc_addr));
 	pj_stun_msg_add_binary_attr(alloc->pool, alloc->data_ind,
@@ -563,39 +514,14 @@ static pj_bool_t turn_on_data_recvfrom(pj_activesock_t *asock,
 		--test_srv->turn_alloc_cnt;
 	    } else
 		resp = create_success_response(test_srv, alloc, req, pool, 0, &auth_key);
-	} else if (req->hdr.type == PJ_STUN_CREATE_PERM_REQUEST) {
-	    for (i=0; i<req->attr_count; ++i) {
-		if (req->attr[i]->type == PJ_STUN_ATTR_XOR_PEER_ADDR) {
-		    pj_stun_xor_peer_addr_attr *pa = (pj_stun_xor_peer_addr_attr*)req->attr[i];
-		    unsigned j;
-
-		    for (j=0; j<alloc->perm_cnt; ++j) {
-			if (pj_sockaddr_cmp(&alloc->perm[j], &pa->sockaddr)==0)
-			    break;
-		    }
-
-		    if (j==alloc->perm_cnt && alloc->perm_cnt < MAX_TURN_PERM) {
-			char peer_info[PJ_INET6_ADDRSTRLEN];
-			pj_sockaddr_print(&pa->sockaddr, peer_info, sizeof(peer_info), 3);
-
-			pj_sockaddr_cp(&alloc->perm[alloc->perm_cnt], &pa->sockaddr);
-			++alloc->perm_cnt;
-
-			PJ_LOG(5,("", "Permission %s added to client %s, perm_cnt=%d", 
-				      peer_info, client_info, alloc->perm_cnt));
-		    }
-
-		}
-	    }
-	    resp = create_success_response(test_srv, alloc, req, pool, 0, &auth_key);
 	} else if (req->hdr.type == PJ_STUN_SEND_INDICATION) {
-	    pj_stun_xor_peer_addr_attr *pa;
+	    pj_stun_peer_addr_attr *pa;
 	    pj_stun_data_attr *da;
 
 	    test_srv->turn_stat.rx_send_ind_cnt++;
 
-	    pa = (pj_stun_xor_peer_addr_attr*)
-		 pj_stun_msg_find_attr(req, PJ_STUN_ATTR_XOR_PEER_ADDR, 0);
+	    pa = (pj_stun_peer_addr_attr*)
+		 pj_stun_msg_find_attr(req, PJ_STUN_ATTR_PEER_ADDR, 0);
 	    da = (pj_stun_data_attr*)
 		 pj_stun_msg_find_attr(req, PJ_STUN_ATTR_DATA, 0);
 	    if (pa && da) {
@@ -610,53 +536,26 @@ static pj_bool_t turn_on_data_recvfrom(pj_activesock_t *asock,
 			break;
 		}
 
-		if (j==alloc->perm_cnt) {
-		    PJ_LOG(5,("", "SendIndication to %s is rejected (no permission)", 
-			          peer_info, client_info, alloc->perm_cnt));
-		} else {
-		    PJ_LOG(5,(THIS_FILE, "Relaying %d bytes data from client %s to peer %s, "
-					 "perm_cnt=%d", 
-			      da->length, client_info, peer_info, alloc->perm_cnt));
+		if (j==alloc->perm_cnt && alloc->perm_cnt < MAX_TURN_PERM) {
+		    pj_sockaddr_cp(&alloc->perm[alloc->perm_cnt], &pa->sockaddr);
+		    ++alloc->perm_cnt;
 
-		    sent = da->length;
-		    pj_activesock_sendto(alloc->sock, &alloc->send_key,
-					 da->data, &sent, 0,
-					 &pa->sockaddr,
-					 pj_sockaddr_get_len(&pa->sockaddr));
+		    PJ_LOG(5,("", "Permission %s added to client %s, perm_cnt=%d", 
+			          peer_info, client_info, alloc->perm_cnt));
 		}
+
+		PJ_LOG(5,(THIS_FILE, "Relaying %d bytes data from client %s to peer %s, "
+				     "perm_cnt=%d", 
+			  da->length, client_info, peer_info, alloc->perm_cnt));
+
+		sent = da->length;
+		pj_activesock_sendto(alloc->sock, &alloc->send_key,
+				     da->data, &sent, 0,
+				     &pa->sockaddr,
+				     pj_sockaddr_get_len(&pa->sockaddr));
 	    } else {
 		PJ_LOG(1,(THIS_FILE, "Invalid Send Indication from %s", client_info));
 	    }
-	} else if (req->hdr.type == PJ_STUN_CHANNEL_BIND_REQUEST) {
-	    pj_stun_xor_peer_addr_attr *pa;
-	    pj_stun_channel_number_attr *cna;
-	    unsigned j, cn;
-
-	    pa = (pj_stun_xor_peer_addr_attr*)
-		 pj_stun_msg_find_attr(req, PJ_STUN_ATTR_XOR_PEER_ADDR, 0);
-	    cna = (pj_stun_channel_number_attr*)
-		 pj_stun_msg_find_attr(req, PJ_STUN_ATTR_CHANNEL_NUMBER, 0);
-	    cn = PJ_STUN_GET_CH_NB(cna->value);
-
-	    resp = create_success_response(test_srv, alloc, req, pool, 0, &auth_key);
-
-	    for (j=0; j<alloc->perm_cnt; ++j) {
-		if (pj_sockaddr_cmp(&alloc->perm[j], &pa->sockaddr)==0)
-		    break;
-	    }
-
-	    if (i==alloc->perm_cnt) {
-		if (alloc->perm_cnt==MAX_TURN_PERM) {
-		    pj_stun_msg_create_response(pool, req, PJ_STUN_SC_INSUFFICIENT_CAPACITY, NULL, &resp);
-		    goto send_pkt;
-		}
-		pj_sockaddr_cp(&alloc->perm[i], &pa->sockaddr);
-		++alloc->perm_cnt;
-	    }
-	    alloc->chnum[i] = cn;
-
-	    resp = create_success_response(test_srv, alloc, req, pool, 0, &auth_key);
-
 	} else if (PJ_STUN_IS_REQUEST(req->hdr.type)) {
 	    pj_stun_msg_create_response(pool, req, PJ_STUN_SC_BAD_REQUEST, NULL, &resp);
 	}
@@ -689,7 +588,7 @@ static pj_bool_t alloc_on_data_recvfrom(pj_activesock_t *asock,
 				       pj_status_t status)
 {
     turn_allocation *alloc;
-    pj_stun_xor_peer_addr_attr *pa;
+    pj_stun_peer_addr_attr *pa;
     pj_stun_data_attr *da;
     char peer_info[PJ_INET6_ADDRSTRLEN+10];
     char client_info[PJ_INET6_ADDRSTRLEN+10];
@@ -724,8 +623,8 @@ static pj_bool_t alloc_on_data_recvfrom(pj_activesock_t *asock,
     }
 
     /* Format a Data indication */
-    pa = (pj_stun_xor_peer_addr_attr*)
-	 pj_stun_msg_find_attr(alloc->data_ind, PJ_STUN_ATTR_XOR_PEER_ADDR, 0);
+    pa = (pj_stun_peer_addr_attr*)
+	 pj_stun_msg_find_attr(alloc->data_ind, PJ_STUN_ATTR_PEER_ADDR, 0);
     da = (pj_stun_data_attr*)
 	 pj_stun_msg_find_attr(alloc->data_ind, PJ_STUN_ATTR_DATA, 0);
     pj_assert(pa && da);

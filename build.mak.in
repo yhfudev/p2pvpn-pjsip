@@ -28,11 +28,6 @@ APP_THIRD_PARTY_LIBS += -lilbccodec-$(TARGET_NAME)
 APP_THIRD_PARTY_LIB_FILES += $(PJ_DIR)/third_party/lib/libilbccodec-$(LIB_SUFFIX)
 endif
 
-ifneq (@ac_no_g7221_codec@,1)
-APP_THIRD_PARTY_LIBS += -lg7221codec-$(TARGET_NAME)
-APP_THIRD_PARTY_LIB_FILES += $(PJ_DIR)/third_party/lib/libg7221codec-$(LIB_SUFFIX)
-endif
-
 ifneq ($(findstring pa,@ac_pjmedia_snd@),)
 APP_THIRD_PARTY_LIBS += -lportaudio-$(TARGET_NAME)
 APP_THIRD_PARTY_LIB_FILES += $(PJ_DIR)/third_party/lib/libportaudio-$(LIB_SUFFIX)
@@ -65,7 +60,6 @@ export APP_LDLIBS := -lpjsua-$(TARGET_NAME)\
 	-lpjsip-$(TARGET_NAME)\
 	-lpjmedia-codec-$(TARGET_NAME)\
 	-lpjmedia-$(TARGET_NAME)\
-	-lpjmedia-audiodev-$(TARGET_NAME)\
 	-lpjnath-$(TARGET_NAME)\
 	-lpjlib-util-$(TARGET_NAME)\
 	$(APP_THIRD_PARTY_LIBS)\
@@ -77,7 +71,6 @@ export APP_LIB_FILES = $(PJ_DIR)/pjsip/lib/libpjsua-$(LIB_SUFFIX) \
 	$(PJ_DIR)/pjsip/lib/libpjsip-$(LIB_SUFFIX) \
 	$(PJ_DIR)/pjmedia/lib/libpjmedia-codec-$(LIB_SUFFIX) \
 	$(PJ_DIR)/pjmedia/lib/libpjmedia-$(LIB_SUFFIX) \
-	$(PJ_DIR)/pjmedia/lib/libpjmedia-audiodev-$(LIB_SUFFIX) \
 	$(PJ_DIR)/pjnath/lib/libpjnath-$(LIB_SUFFIX) \
 	$(PJ_DIR)/pjlib-util/lib/libpjlib-util-$(LIB_SUFFIX) \
 	$(APP_THIRD_PARTY_LIB_FILES) \

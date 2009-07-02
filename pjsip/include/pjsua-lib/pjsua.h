@@ -55,13 +55,14 @@ PJ_BEGIN_DECL
 
 
 /**
- * @defgroup PJSUA_LIB PJSUA API - High Level Softphone API
+ * @defgroup PJSUA_LIB PJSUA API - High Level Softphone API for C/C++ and Python
  * @brief Very high level API for constructing SIP UA applications.
  * @{
  *
- * @section pjsua_api_intro A SIP User Agent API for C/C++
+ * @section pjsua_api_intro A SIP User Agent API for C/C++ and Python
  *
- * PJSUA API is very high level API for constructing SIP multimedia user agent
+ * PJSUA API is very high level API, available for C/C++ and Python language,
+ * for constructing SIP multimedia user agent
  * applications. It wraps together the signaling and media functionalities
  * into an easy to use call API, provides account management, buddy
  * management, presence, instant messaging, along with multimedia
@@ -84,9 +85,21 @@ PJ_BEGIN_DECL
  * <A HREF="http://www.pjsip.org/using.htm">Getting Started with PJSIP</A>
  * page.
  *
+ * @subsection pjsua_for_python Python Binding
+ *
+ * The Python binding for PJSUA-API is implemented by <b>py_pjsua</b>
+ * module, in <tt>pjsip-apps/py_pjsua</tt> directory. This module is
+ * built by building <tt>py_pjsua</tt> project in <tt>pjsip_apps</tt>
+ * Visual Studio workspace, or by invoking the usual <tt>setup.py</tt>
+ * Python installer script.
+ *
+ * The Python script then can import the PJSUA-API Python module by
+ * using <b>import py_pjsua</b> construct as usual.
+ *
+ *
  * @section pjsua_samples
  *
- * Few samples are provided:
+ * Few samples are provided both in C and Python.
  *
   - @ref page_pjsip_sample_simple_pjsuaua_c\n
     Very simple SIP User Agent with registration, call, and media, using
@@ -97,6 +110,11 @@ PJ_BEGIN_DECL
     PJSUA is a console based application, designed to be simple enough
     to be readble, but powerful enough to demonstrate all features
     available in PJSIP and PJMEDIA.\n
+
+  - Python sample\n
+    For a real simple Python sample application, have a look at
+    <A HREF="http://www.pjsip.org/trac/browser/pjproject/trunk/pjsip-apps/src/py_pjsua/pjsua_app.py">
+    <tt>pjsip-apps/src/py_pjsua/pjsua_app.py</tt></A> file.
 
  * @section root_using_pjsua_lib Using PJSUA API
  *
@@ -124,8 +142,8 @@ PJ_BEGIN_DECL
  *
  * @subsection creating_pjsua_lib Creating PJSUA
  *
- * Before anything else, application must create PJSUA by calling 
- * #pjsua_create().
+ * Before anything else, application must create PJSUA by calling #pjsua_create()
+ * (or <tt>py_pjsua.create()</tt> from Python).
  * This, among other things, will initialize PJLIB, which is crucial before 
  * any PJLIB functions can be called, PJLIB-UTIL, and create a SIP endpoint.
  *
@@ -188,6 +206,57 @@ PJ_BEGIN_DECL
  \endcode
  *
  *
+ * @subsubsection init_pjsua_lib_python PJSUA-LIB Initialization (in Python)
+ * Sample code to initialize PJSUA in Python code:
+
+ \code
+
+import py_pjsua
+
+#
+# Initialize pjsua.
+#
+def app_init():
+	# Create pjsua before anything else
+	status = py_pjsua.create()
+	if status != 0:
+		err_exit("pjsua create() error", status)
+
+	# We use default logging config for this sample
+	log_cfg = py_pjsua.logging_config_default()
+
+	# Create and initialize pjsua config
+	# Note: for this Python module, thread_cnt must be 0 since Python
+	#       doesn't like to be called from alien thread (pjsua's thread
+	#       in this case)	    
+	ua_cfg = py_pjsua.config_default()
+	ua_cfg.thread_cnt = 0
+	ua_cfg.user_agent = "PJSUA/Python 0.1"
+
+	# Override callbacks. At the very least application would want to
+	# override the call callbacks in pjsua_config
+	ua_cfg.cb.on_incoming_call = ...
+	ua_cfg.cb.on_call_state = ...
+
+	# Use default media config for this cample
+	med_cfg = py_pjsua.media_config_default()
+
+	#
+	# Initialize pjsua!!
+	#
+	status = py_pjsua.init(ua_cfg, log_cfg, med_cfg)
+	if status != 0:
+		err_exit("pjsua init() error", status)
+
+
+
+# Utility: display PJ error and exit
+#
+def err_exit(title, rc):
+	py_pjsua.perror(THIS_FILE, title, rc)
+	exit(1)
+
+ \endcode
 
 
  * @subsection other_init_pjsua_lib Other Initialization
@@ -245,6 +314,63 @@ PJ_BEGIN_DECL
  }
  \endcode
 
+ * @subsubsection starting_pjsua_lib_python Python Example for starting PJSUA
+ * For Python, starting PJSUA-LIB takes one more step, that is to initialize
+ * Python worker thread to poll PJSUA-LIB. This step is necessary because
+ * Python doesn't like it when it is called by an "alien" thread (that is,
+ * thread that is not created using Python API).
+ *
+ * Because of this, we cannot use a worker thread in PJSUA-LIB, because then
+ * the Python callback will be called by an "alien" thread and this would
+ * crash Python (or raise assert() probably).
+ *
+ * So because worker thread is disabled, we need to create a worker thread
+ * in Python. Note that this may not be necessary if we're creating a
+ * GUI application, because then we can attach, for example, a GUI timer
+ * object to poll the PJSUA-LIB. But because we're creating a console 
+ * application which will block at <tt>sys.stdin.readline()</tt>, we need
+ * to have a worker thread to poll PJSUA-LIB.
+
+ \code
+
+import thread
+
+C_QUIT = 0
+
+
+def app_start():
+	# Done with initialization, start pjsua!!
+	#
+	status = py_pjsua.start()
+	if status != 0:
+		py_pjsua.destroy()
+		err_exit("Error starting pjsua!", status)
+
+	# Start worker thread
+	thr = thread.start_new(worker_thread_main, (0,))
+    
+	print "PJSUA Started!!"
+
+#
+# Worker thread function.
+# Python doesn't like it when it's called from an alien thread
+# (pjsua's worker thread, in this case), so for Python we must
+# disable worker thread in pjsua and poll pjsua from Python instead.
+#
+def worker_thread_main(arg):
+	global C_QUIT
+	thread_desc = 0
+	status = py_pjsua.thread_register("python worker", thread_desc)
+	if status != 0:
+		py_pjsua.perror(THIS_FILE, "Error registering thread", status)
+	else:
+		while C_QUIT == 0:
+			py_pjsua.handle_events(50)
+		print "Worker thread quitting.."
+		C_QUIT = 2
+
+
+ \endcode
  */
 
 /** Constant to identify invalid ID for all sorts of IDs. */
@@ -309,6 +435,14 @@ typedef struct pjsua_msg_data pjsua_msg_data;
  * Logging configuration, which can be (optionally) specified when calling
  * #pjsua_init(). Application must call #pjsua_logging_config_default() to
  * initialize this structure with the default values.
+ *
+ * \par Sample Python Syntax:
+ * \code
+    # Python type: py_pjsua.Logging_Config
+ 
+    log_cfg = py_pjsua.logging_config_default()
+    log_cfg.level = 4
+ * \endcode
  */
 typedef struct pjsua_logging_config
 {
@@ -338,19 +472,19 @@ typedef struct pjsua_logging_config
     pj_str_t	log_filename;
 
     /**
-     * Additional flags to be given to #pj_file_open() when opening
-     * the log file. By default, the flag is PJ_O_WRONLY. Application
-     * may set PJ_O_APPEND here so that logs are appended to existing
-     * file instead of overwriting it.
-     *
-     * Default is 0.
-     */
-    unsigned	log_file_flags;
-
-    /**
      * Optional callback function to be called to write log to 
      * application specific device. This function will be called for
      * log messages on input verbosity level.
+     *
+     * \par Sample Python Syntax:
+     * \code
+     # level:	integer
+     # data:	string
+     # len:	integer
+
+     def cb(level, data, len):
+	    print data,
+     * \endcode
      */
     void       (*cb)(int level, const char *data, int len);
 
@@ -362,6 +496,12 @@ typedef struct pjsua_logging_config
  * Use this function to initialize logging config.
  *
  * @param cfg	The logging config to be initialized.
+ *
+ * \par Python Syntax:
+ * The Python function instantiates and initialize the logging config:
+ * \code
+ logging_cfg = py_pjsua.logging_config_default()
+ * \endcode
  */
 PJ_DECL(void) pjsua_logging_config_default(pjsua_logging_config *cfg);
 
@@ -372,6 +512,10 @@ PJ_DECL(void) pjsua_logging_config_default(pjsua_logging_config *cfg);
  * @param pool	    Pool to use.
  * @param dst	    Destination config.
  * @param src	    Source config.
+ *
+ * \par Python Syntax:
+ * Not available (for now). Ideally we should be able to just assign
+ * one config to another, but this has not been tested.
  */
 PJ_DECL(void) pjsua_logging_config_dup(pj_pool_t *pool,
 				       pjsua_logging_config *dst,
@@ -383,6 +527,9 @@ PJ_DECL(void) pjsua_logging_config_dup(pj_pool_t *pool,
  * notification from PJSUA-API. All of these callbacks are OPTIONAL, 
  * although definitely application would want to implement some of
  * the important callbacks (such as \a on_incoming_call).
+ *
+ * \par Python Syntax:
+ * This callback structure is embedded on pjsua_config structure.
  */
 typedef struct pjsua_callback
 {
@@ -393,6 +540,15 @@ typedef struct pjsua_callback
      *
      * @param call_id	The call index.
      * @param e		Event which causes the call state to change.
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id: integer
+     # e:	an opaque object
+
+     def on_call_state(call_id, e):
+	    return
+     * \endcode
      */
     void (*on_call_state)(pjsua_call_id call_id, pjsip_event *e);
 
@@ -403,6 +559,16 @@ typedef struct pjsua_callback
      * @param call_id	The call id that has just been created for
      *			the call.
      * @param rdata	The incoming INVITE request.
+     *
+     * \par Python Syntax:
+     * \code
+     # acc_id:	integer
+     # call_id: integer
+     # rdata:	an opaque object
+
+     def on_incoming_call(acc_id, call_id, rdata):
+	    return
+     * \endcode
      */
     void (*on_incoming_call)(pjsua_acc_id acc_id, pjsua_call_id call_id,
 			     pjsip_rx_data *rdata);
@@ -430,6 +596,14 @@ typedef struct pjsua_callback
      * failure.
      *
      * @param call_id	The call index.
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id: integer
+
+     def on_call_media_state(call_id):
+	    return
+     * \endcode
      */
     void (*on_call_media_state)(pjsua_call_id call_id);
 
@@ -447,6 +621,9 @@ typedef struct pjsua_callback
      *			    stream. Application may modify this pointer to
      *			    point to different media port to be registered
      *			    to the conference bridge.
+     *
+     * \par Python:
+     * Not applicable. 
      */
     void (*on_stream_created)(pjsua_call_id call_id, 
 			      pjmedia_session *sess,
@@ -460,6 +637,9 @@ typedef struct pjsua_callback
      * @param call_id	    Call identification.
      * @param sess	    Media session for the call.
      * @param stream_idx    Stream index in the media session.
+     *
+     * \par Python:
+     * Not applicable. 
      */
     void (*on_stream_destroyed)(pjsua_call_id call_id,
                                 pjmedia_session *sess, 
@@ -470,6 +650,15 @@ typedef struct pjsua_callback
      *
      * @param call_id	The call index.
      * @param digit	DTMF ASCII digit.
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id: integer
+     # digit:	digit string
+
+     def on_dtmf_digit(call_id, digit):
+	    return
+     * \endcode
      */
     void (*on_dtmf_digit)(pjsua_call_id call_id, int digit);
 
@@ -485,6 +674,17 @@ typedef struct pjsua_callback
      *			transfered to.
      * @param code	Status code to be returned for the call transfer
      *			request. On input, it contains status code 200.
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id: integer
+     # dst:	string
+     # code:	integer
+
+     def on_call_transfer_request(call_id, dst, code):
+	    return code
+
+     * \endcode 
      */
     void (*on_call_transfer_request)(pjsua_call_id call_id,
 				     const pj_str_t *dst,
@@ -506,6 +706,20 @@ typedef struct pjsua_callback
      *			    can set this to FALSE if it no longer wants
      *			    to receie further notification (for example,
      *			    after it hangs up the call).
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id: integer
+     # st_code: integer
+     # st_text: string
+     # final:	integer
+     # cont:	integer
+
+     # return:	cont
+
+     def on_call_transfer_status(call_id, st_code, st_text, final, cont):
+	    return cont
+     * \endcode
      */
     void (*on_call_transfer_status)(pjsua_call_id call_id,
 				    int st_code,
@@ -522,6 +736,19 @@ typedef struct pjsua_callback
      * @param st_code	    Status code to be set by application. Application
      *			    should only return a final status (200-699).
      * @param st_text	    Optional status text to be set by application.
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id: integer
+     # rdata:	an opaque object
+     # st_code: integer
+     # st_text: string
+
+     # return:	(st_code, st_text) tuple
+
+     def on_call_replace_request(call_id, rdata, st_code, st_text):
+	    return st_code, st_text
+     * \endcode
      */
     void (*on_call_replace_request)(pjsua_call_id call_id,
 				    pjsip_rx_data *rdata,
@@ -540,6 +767,15 @@ typedef struct pjsua_callback
      *			    new call.
      * @param new_call_id   The new call.
      * @param rdata	    The incoming INVITE with Replaces request.
+     *
+     * \par Python Syntax:
+     * \code
+     # old_call_id: integer
+     # new_call_id: integer
+
+     def on_call_replaced(old_call_id, new_call_id):
+	    return
+     * \endcode
      */
     void (*on_call_replaced)(pjsua_call_id old_call_id,
 			     pjsua_call_id new_call_id);
@@ -551,6 +787,14 @@ typedef struct pjsua_callback
      * registration details.
      *
      * @param acc_id	    Account ID.
+     *
+     * \par Python Syntax:
+     * \code
+     # acc_id:	account ID (integer)
+
+     def on_reg_state(acc_id):
+	    return
+     * \endcode
      */
     void (*on_reg_state)(pjsua_acc_id acc_id);
 
@@ -632,6 +876,14 @@ typedef struct pjsua_callback
      * Application may then query the buddy into to get the details.
      *
      * @param buddy_id	    The buddy id.
+     *
+     * \par Python Syntax:
+     * \code
+     # buddy_id:    integer
+
+     def on_buddy_state(buddy_id):
+	    return
+     * \endcode
      */
     void (*on_buddy_state)(pjsua_buddy_id buddy_id);
 
@@ -651,6 +903,20 @@ typedef struct pjsua_callback
      * @param contact	    The Contact URI of the sender, if present.
      * @param mime_type	    MIME type of the message.
      * @param body	    The message content.
+     *
+     * \par Python Syntax:
+     * \code
+     # call_id:	    integer
+     # from:	    string
+     # to:	    string
+     # contact:	    string
+     # mime_type:   string
+     # body:	    string
+     # acc_id:      integer
+
+     def on_pager(call_id, from, to, contact, mime_type, body):
+	    return
+     * \endcode
      */
     void (*on_pager)(pjsua_call_id call_id, const pj_str_t *from,
 		     const pj_str_t *to, const pj_str_t *contact,
@@ -690,6 +956,20 @@ typedef struct pjsua_callback
      *			    IM message.
      * @param status	    Delivery status.
      * @param reason	    Delivery status reason.
+     *
+     * \par Python Syntax
+     * \code
+     # call_id:	    integer
+     # to:	    string
+     # body:	    string
+     # user_data:   string
+     # status:	    integer
+     # reason:	    string
+     # acc_id:      integer
+
+     def on_pager_status(call_id, to, body, user_data, status, reason):
+	    return
+     * \endcode
      */
     void (*on_pager_status)(pjsua_call_id call_id,
 			    const pj_str_t *to,
@@ -739,6 +1019,18 @@ typedef struct pjsua_callback
      * @param contact	    The Contact URI of the sender, if present.
      * @param is_typing	    Non-zero if peer is typing, or zero if peer
      *			    has stopped typing a message.
+     *
+     * \par Python Syntax
+     * \code
+     # call_id:	    string
+     # from:	    string
+     # to:	    string
+     # contact:	    string
+     # is_typing:   integer
+
+     def on_typing(call_id, from, to, contact, is_typing):
+	    return
+     * \endcode
      */
     void (*on_typing)(pjsua_call_id call_id, const pj_str_t *from,
 		      const pj_str_t *to, const pj_str_t *contact,
@@ -831,6 +1123,13 @@ typedef struct pjsua_callback
  * user agent behavior, and can be specified when calling #pjsua_init().
  * Before setting the values, application must call #pjsua_config_default()
  * to initialize this structure with the default values.
+ *
+ * \par Python Sample Syntax:
+ * The pjsua_config type in Python is <tt>py_pjsua.Config</tt>. Application
+ * creates the instance by calling <tt>py_pjsua.config_default()</tt>:
+ * \code
+    cfg = py_pjsua.config_default()
+ * \endcode
  */
 typedef struct pjsua_config
 {
@@ -1003,6 +1302,14 @@ typedef struct pjsua_config
  * Use this function to initialize pjsua config.
  *
  * @param cfg	pjsua config to be initialized.
+ *
+ * \par Python Sample Syntax:
+ * The corresponding Python function creates an instance of the config and
+ * initializes it to the default settings:
+ * \code
+    cfg = py_pjsua.config_default()
+ * \endcode
+
  */
 PJ_DECL(void) pjsua_config_default(pjsua_config *cfg);
 
@@ -1031,6 +1338,13 @@ PJ_DECL(void) pjsua_config_dup(pj_pool_t *pool,
  *
  * Application MUST call #pjsua_msg_data_init() to initialize this
  * structure before setting its values.
+ *
+ * \par Python Syntax
+ * The data type in Python is <tt>py_pjsua.Msg_Data</tt>. Application is
+ * recommended to instantiate the structure by using this construct:
+ * \code
+    msg_data = py_pjsua.msg_data_init()
+ * \endcode
  */
 struct pjsua_msg_data
 {
@@ -1039,6 +1353,14 @@ struct pjsua_msg_data
      * headers to the list by creating the header, either from the heap/pool
      * or from temporary local variable, and add the header using
      * linked list operation. See pjsip_apps.c for some sample codes.
+     *
+     * \par Python:
+     * This field is implemented as string linked-list in Python, where each
+     * string describes the header. For example:
+     \code
+	msg_data = py_pjsua.Msg_Data()
+	msg_data.hdr_list = ["Subject: Hello py_pjsua!", "Priority: very low"]
+     \endcode
      */
     pjsip_hdr	hdr_list;
 
@@ -1059,6 +1381,12 @@ struct pjsua_msg_data
  * Initialize message data.
  *
  * @param msg_data  Message data to be initialized.
+ *
+ * \par Python
+ * The corresponding Python function creates and initializes the structure:
+ * \code
+    msg_data = py_pjsua.msg_data_init()
+ * \endcode
  */
 PJ_DECL(void) pjsua_msg_data_init(pjsua_msg_data *msg_data);
 
@@ -1070,6 +1398,11 @@ PJ_DECL(void) pjsua_msg_data_init(pjsua_msg_data *msg_data);
  * application must call pjsua_destroy() before quitting.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.create()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_create(void);
 
@@ -1090,6 +1423,15 @@ typedef struct pjsua_media_config pjsua_media_config;
  * @param media_cfg	Optional media configuration.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function is similar in Python:
+ * \code
+    status = py_pjsua.init(ua_cfg, log_cfg, media_cfg)
+ * \endcode
+ * Note that \a ua_cfg, \a log_cfg, and \a media_cfg are optional, and
+ * the Python script may pass None if it doesn't want to configure the 
+ * setting.
  */
 PJ_DECL(pj_status_t) pjsua_init(const pjsua_config *ua_cfg,
 				const pjsua_logging_config *log_cfg,
@@ -1104,6 +1446,12 @@ PJ_DECL(pj_status_t) pjsua_init(const pjsua_config *ua_cfg,
  * Application may call this function anytime after #pjsua_init().
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function is similar in Python:
+ * \code
+    status = py_pjsua.start()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_start(void);
 
@@ -1120,6 +1468,12 @@ PJ_DECL(pj_status_t) pjsua_start(void);
  * keep track of it's state.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function is similar in Python:
+ * \code
+    status = py_pjsua.destroy()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_destroy(void);
 
@@ -1137,6 +1491,12 @@ PJ_DECL(pj_status_t) pjsua_destroy(void);
  * @return  The number of events that have been handled during the
  *	    poll. Negative value indicates error, and application
  *	    can retrieve the error as (status = -return_value).
+ *
+ * \par Python:
+ * The function is similar in Python:
+ * \code
+    n = py_pjsua.handle_events(msec_timeout)
+ * \endcode
  */
 PJ_DECL(int) pjsua_handle_events(unsigned msec_timeout);
 
@@ -1150,6 +1510,12 @@ PJ_DECL(int) pjsua_handle_events(unsigned msec_timeout);
  * @param increment	Increment size.
  *
  * @return		The pool, or NULL when there's no memory.
+ *
+ * \par Python:
+ * Python script may also create a pool object from the script:
+ * \code
+    pool = py_pjsua.pool_create(name, init_size, increment)
+ * \endcode
  */
 PJ_DECL(pj_pool_t*) pjsua_pool_create(const char *name, pj_size_t init_size,
 				      pj_size_t increment);
@@ -1162,6 +1528,12 @@ PJ_DECL(pj_pool_t*) pjsua_pool_create(const char *name, pj_size_t init_size,
  * @param c		Logging configuration.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function is similar in Python:
+ * \code
+    status = py_pjsua.reconfigure_logging(log_cfg)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_reconfigure_logging(const pjsua_logging_config *c);
 
@@ -1172,6 +1544,14 @@ PJ_DECL(pj_status_t) pjsua_reconfigure_logging(const pjsua_logging_config *c);
  * Only valid after #pjsua_init() is called.
  * 
  * @return		SIP endpoint instance.
+ *
+ * \par Python:
+ * Application may retrieve the SIP endpoint instance:
+ * \code
+    endpt = py_pjsua.get_pjsip_endpt()
+ * \endcode
+ * However currently the object is just an opaque object and does not have
+ * any use for Python scripts.
  */
 PJ_DECL(pjsip_endpoint*) pjsua_get_pjsip_endpt(void);
 
@@ -1180,6 +1560,14 @@ PJ_DECL(pjsip_endpoint*) pjsua_get_pjsip_endpt(void);
  * Only valid after #pjsua_init() is called.
  *
  * @return		Media endpoint instance.
+ *
+ * \par Python:
+ * Application may retrieve the media endpoint instance:
+ * \code
+    endpt = py_pjsua.get_pjmedia_endpt()
+ * \endcode
+ * However currently the object is just an opaque object and does not have
+ * any use for Python scripts.
  */
 PJ_DECL(pjmedia_endpt*) pjsua_get_pjmedia_endpt(void);
 
@@ -1188,6 +1576,14 @@ PJ_DECL(pjmedia_endpt*) pjsua_get_pjmedia_endpt(void);
  * Only valid after #pjsua_create() is called.
  *
  * @return		Pool factory currently used by PJSUA.
+ *
+ * \par Python:
+ * Application may retrieve the pool factory instance:
+ * \code
+    endpt = py_pjsua.get_pool_factory()
+ * \endcode
+ * However currently the object is just an opaque object and does not have
+ * any use for Python scripts.
  */
 PJ_DECL(pj_pool_factory*) pjsua_get_pool_factory(void);
 
@@ -1243,6 +1639,11 @@ PJ_DECL(pj_status_t) pjsua_get_nat_type(pj_stun_nat_type *type);
  * @param url		The URL, as NULL terminated string.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.verify_sip_url(url)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_verify_sip_url(const char *url);
 
@@ -1254,6 +1655,11 @@ PJ_DECL(pj_status_t) pjsua_verify_sip_url(const char *url);
  * @param sender	The log sender field.
  * @param title		Message title for the error.
  * @param status	Status code.
+ *
+ * \par Python:
+ * \code
+    py_pjsua.perror(sender, title, status)
+ * \endcode
  */
 PJ_DECL(void) pjsua_perror(const char *sender, const char *title, 
 			   pj_status_t status);
@@ -1300,6 +1706,13 @@ typedef int pjsua_transport_id;
  * and media. Before setting some values to this structure, application
  * MUST call #pjsua_transport_config_default() to initialize its
  * values with default settings.
+ *
+ * \par Python:
+ * The data type in Python is <tt>py_pjsua.Transport_Config</tt>,
+ * although application can just do this to create the instance:
+ * \code
+    transport_cfg = py_pjsua.transport_config_default()
+ * \endcode
  */
 typedef struct pjsua_transport_config
 {
@@ -1349,6 +1762,12 @@ typedef struct pjsua_transport_config
  * Call this function to initialize UDP config with default values.
  *
  * @param cfg	    The UDP config to be initialized.
+ *
+ * \par Python:
+ * The corresponding Python function is rather different:
+ * \code
+    transport_cfg = py_pjsua.transport_config_default()
+ * \endcode
  */
 PJ_DECL(void) pjsua_transport_config_default(pjsua_transport_config *cfg);
 
@@ -1359,6 +1778,10 @@ PJ_DECL(void) pjsua_transport_config_default(pjsua_transport_config *cfg);
  * @param pool		The pool.
  * @param dst		The destination config.
  * @param src		The source config.
+ *
+ * \par Python:
+ * Not applicable. One should be able to just copy one variable instance
+ * to another in Python.
  */
 PJ_DECL(void) pjsua_transport_config_dup(pj_pool_t *pool,
 					 pjsua_transport_config *dst,
@@ -1368,6 +1791,9 @@ PJ_DECL(void) pjsua_transport_config_dup(pj_pool_t *pool,
 /**
  * This structure describes transport information returned by
  * #pjsua_transport_get_info() function.
+ *
+ * \par Python:
+ * The corresponding data type in Python is <tt>py_pjsua.Transport_Info</tt>.
  */
 typedef struct pjsua_transport_info
 {
@@ -1429,6 +1855,12 @@ typedef struct pjsua_transport_info
  * @param p_id		Optional pointer to receive transport ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The corresponding Python function returns (status,id) tuple:
+ * \code
+    status, transport_id = py_pjsua.transport_create(type, cfg)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_transport_create(pjsip_transport_type_e type,
 					    const pjsua_transport_config *cfg,
@@ -1443,6 +1875,10 @@ PJ_DECL(pj_status_t) pjsua_transport_create(pjsip_transport_type_e type,
  * @param p_id		Optional pointer to receive transport ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Not applicable (for now), because one cannot create a custom transport
+ * from Python script.
  */
 PJ_DECL(pj_status_t) pjsua_transport_register(pjsip_transport *tp,
 					      pjsua_transport_id *p_id);
@@ -1459,6 +1895,12 @@ PJ_DECL(pj_status_t) pjsua_transport_register(pjsip_transport *tp,
  *			On return, it contains the actual number of elements.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function returns list of integers representing transport ids:
+ * \code
+    [int] = py_pjsua.enum_transports()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_enum_transports( pjsua_transport_id id[],
 					    unsigned *count );
@@ -1471,6 +1913,12 @@ PJ_DECL(pj_status_t) pjsua_enum_transports( pjsua_transport_id id[],
  * @param info		Pointer to receive transport info.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    transport_info = py_pjsua.transport_get_info(id)
+ * \endcode
+ * The Python function returns None on error.
  */
 PJ_DECL(pj_status_t) pjsua_transport_get_info(pjsua_transport_id id,
 					      pjsua_transport_info *info);
@@ -1486,6 +1934,11 @@ PJ_DECL(pj_status_t) pjsua_transport_get_info(pjsua_transport_id id,
  * @param enabled	Non-zero to enable, zero to disable.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.transport_set_enable(id, enabled)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_transport_set_enable(pjsua_transport_id id,
 						pj_bool_t enabled);
@@ -1504,6 +1957,11 @@ PJ_DECL(pj_status_t) pjsua_transport_set_enable(pjsua_transport_id id,
  *			is not recommended!
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.transport_close(id, force)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_transport_close( pjsua_transport_id id,
 					    pj_bool_t force );
@@ -1579,7 +2037,7 @@ PJ_DECL(pj_status_t) pjsua_transport_close( pjsua_transport_id id,
  * Default PUBLISH expiration
  */
 #ifndef PJSUA_PUBLISH_EXPIRATION
-#   define PJSUA_PUBLISH_EXPIRATION PJSIP_PUBC_EXPIRATION_NOT_SPECIFIED
+#   define PJSUA_PUBLISH_EXPIRATION 600
 #endif
 
 
@@ -1605,6 +2063,14 @@ PJ_DECL(pj_status_t) pjsua_transport_close( pjsua_transport_id id,
  * This structure describes account configuration to be specified when
  * adding a new account with #pjsua_acc_add(). Application MUST initialize
  * this structure first by calling #pjsua_acc_config_default().
+ *
+ * \par Python:
+ * The data type in Python is <tt>py_pjsua.Acc_Config</tt>, but normally
+ * application can just use the snippet below to create and initialize
+ * the account config:
+ * \code
+    acc_cfg = py_pjsua.acc_config_default()
+ * \endcode
  */
 typedef struct pjsua_acc_config
 {
@@ -1687,6 +2153,9 @@ typedef struct pjsua_acc_config
 
     /**
      * Number of proxies in the proxy array below.
+     *
+     * \par Python:
+     * Not applicable, as \a proxy is implemented as list of strings.
      */
     unsigned	    proxy_cnt;
 
@@ -1702,6 +2171,9 @@ typedef struct pjsua_acc_config
      * first). If global outbound proxies are configured in pjsua_config,
      * then these account proxies will be placed after the global outbound
      * proxies in the routeset.
+     *
+     * \par Python:
+     * This will be list of strings.
      */
     pj_str_t	    proxy[PJSUA_ACC_MAX_PROXIES];
 
@@ -1713,6 +2185,9 @@ typedef struct pjsua_acc_config
 
     /** 
      * Number of credentials in the credential array.
+     *
+     * \par Python:
+     * Not applicable, since \a cred_info is a list of credentials.
      */
     unsigned	    cred_count;
 
@@ -1722,6 +2197,9 @@ typedef struct pjsua_acc_config
      * against the service provider. More credentials can be specified, for
      * example when the requests are expected to be challenged by the
      * proxies in the route set.
+     *
+     * \par Python:
+     * This field is a list of credentials.
      */
     pjsip_cred_info cred_info[PJSUA_ACC_MAX_PROXIES];
 
@@ -1800,6 +2278,13 @@ typedef struct pjsua_acc_config
  * Call this function to initialize account config with default values.
  *
  * @param cfg	    The account config to be initialized.
+ *
+ * \par Python:
+ * In Python, this function both creates and initializes the account
+ * config:
+ * \code
+    acc_cfg = py_pjsua.acc_config_default()
+ * \endcode
  */
 PJ_DECL(void) pjsua_acc_config_default(pjsua_acc_config *cfg);
 
@@ -1819,6 +2304,9 @@ PJ_DECL(void) pjsua_acc_config_dup(pj_pool_t *pool,
 /**
  * Account info. Application can query account info by calling 
  * #pjsua_acc_get_info().
+ *
+ * \par Python:
+ * The data type in Python is <tt>py_pjsua.Acc_Info</tt>.
  */
 typedef struct pjsua_acc_info
 {
@@ -1888,6 +2376,11 @@ typedef struct pjsua_acc_info
  * Get number of current accounts.
  *
  * @return		Current number of accounts.
+ *
+ * \par Python:
+ * \code
+    count = py_pjsua.acc_get_count()
+ * \endcode
  */
 PJ_DECL(unsigned) pjsua_acc_get_count(void);
 
@@ -1898,6 +2391,11 @@ PJ_DECL(unsigned) pjsua_acc_get_count(void);
  * @param acc_id	Account ID to check.
  *
  * @return		Non-zero if account ID is valid.
+ *
+ * \par Python:
+ * \code
+    is_valid = py_pjsua.acc_is_valid(acc_id)
+ * \endcode
  */
 PJ_DECL(pj_bool_t) pjsua_acc_is_valid(pjsua_acc_id acc_id);
 
@@ -1909,6 +2407,11 @@ PJ_DECL(pj_bool_t) pjsua_acc_is_valid(pjsua_acc_id acc_id);
  * @param acc_id	The account ID to be used as default.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.acc_set_default(acc_id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_set_default(pjsua_acc_id acc_id);
 
@@ -1920,6 +2423,11 @@ PJ_DECL(pj_status_t) pjsua_acc_set_default(pjsua_acc_id acc_id);
  *
  * @return		The default account ID, or PJSUA_INVALID_ID if no
  *			default account is configured.
+ *
+ * \par Python:
+ * \code
+    acc_id = py_pjsua.acc_get_default()
+ * \endcode
  */
 PJ_DECL(pjsua_acc_id) pjsua_acc_get_default(void);
 
@@ -1943,6 +2451,12 @@ PJ_DECL(pjsua_acc_id) pjsua_acc_get_default(void);
  * @param p_acc_id	Pointer to receive account ID of the new account.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function returns (status, account_id) tuple:
+ * \code
+    status, account_id = py_pjsua.acc_add(acc_cfg, is_default)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_add(const pjsua_acc_config *acc_cfg,
 				   pj_bool_t is_default,
@@ -1964,6 +2478,12 @@ PJ_DECL(pj_status_t) pjsua_acc_add(const pjsua_acc_config *acc_cfg,
  * @param p_acc_id	Pointer to receive account ID of the new account.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function returns (status, account_id) tuple:
+ * \code
+    status, account_id = py_pjsua.acc_add_local(tid, is_default)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_add_local(pjsua_transport_id tid,
 					 pj_bool_t is_default,
@@ -2000,6 +2520,11 @@ PJ_DECL(void*) pjsua_acc_get_user_data(pjsua_acc_id acc_id);
  * @param acc_id	Id of the account to be deleted.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.acc_del(acc_id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id);
 
@@ -2011,6 +2536,11 @@ PJ_DECL(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id);
  * @param acc_cfg	New account configuration.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.acc_modify(acc_id, acc_cfg)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_modify(pjsua_acc_id acc_id,
 				      const pjsua_acc_config *acc_cfg);
@@ -2028,6 +2558,11 @@ PJ_DECL(pj_status_t) pjsua_acc_modify(pjsua_acc_id acc_id,
  * @param is_online	True of false.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.acc_set_online_status(acc_id, is_online)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_set_online_status(pjsua_acc_id acc_id,
 						 pj_bool_t is_online);
@@ -2063,6 +2598,11 @@ PJ_DECL(pj_status_t) pjsua_acc_set_online_status2(pjsua_acc_id acc_id,
  *			unregistration process.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.acc_set_registration(acc_id, renew)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_set_registration(pjsua_acc_id acc_id, 
 						pj_bool_t renew);
@@ -2074,6 +2614,12 @@ PJ_DECL(pj_status_t) pjsua_acc_set_registration(pjsua_acc_id acc_id,
  * @param info		Pointer to receive account information.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    acc_info = py_pjsua.acc_get_info(acc_id)
+ * \endcode
+ * The function returns None if account ID is not valid.
  */
 PJ_DECL(pj_status_t) pjsua_acc_get_info(pjsua_acc_id acc_id,
 					pjsua_acc_info *info);
@@ -2091,6 +2637,12 @@ PJ_DECL(pj_status_t) pjsua_acc_get_info(pjsua_acc_id acc_id,
  *			On return, it contains the actual number of elements.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function takes no argument and returns list of account Ids:
+ * \code
+  [acc_ids] = py_pjsua.enum_accs()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_enum_accs(pjsua_acc_id ids[],
 				     unsigned *count );
@@ -2104,6 +2656,12 @@ PJ_DECL(pj_status_t) pjsua_enum_accs(pjsua_acc_id ids[],
  *			On return, it contains the actual number of elements.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function takes no argument and returns list of account infos:
+ * \code
+    [acc_info] = py_pjsua.acc_enum_info()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_enum_info( pjsua_acc_info info[],
 					  unsigned *count );
@@ -2116,6 +2674,11 @@ PJ_DECL(pj_status_t) pjsua_acc_enum_info( pjsua_acc_info info[],
  * @param url		The remote URL to reach.
  *
  * @return		Account id.
+ *
+ * \par Python:
+ * \code
+    acc_id = py_pjsua.acc_find_for_outgoing(url)
+ * \endcode
  */
 PJ_DECL(pjsua_acc_id) pjsua_acc_find_for_outgoing(const pj_str_t *url);
 
@@ -2127,6 +2690,11 @@ PJ_DECL(pjsua_acc_id) pjsua_acc_find_for_outgoing(const pj_str_t *url);
  * @param rdata		The incoming request message.
  *
  * @return		Account id.
+ *
+ * \par Python:
+ * \code
+    acc_id = py_pjsua.acc_find_for_outgoing(url)
+ * \endcode
  */
 PJ_DECL(pjsua_acc_id) pjsua_acc_find_for_incoming(pjsip_rx_data *rdata);
 
@@ -2160,6 +2728,12 @@ PJ_DECL(pj_status_t) pjsua_acc_create_request(pjsua_acc_id acc_id,
  * @param uri		Destination URI of the request.
  *
  * @return		PJ_SUCCESS on success, other on error.
+ *
+ * \par Python:
+ * This function is still experimental in Python:
+ * \code
+    uri = py_pjsua.acc_create_uac_contact(pool, acc_id, uri)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_create_uac_contact( pj_pool_t *pool,
 						   pj_str_t *contact,
@@ -2178,6 +2752,12 @@ PJ_DECL(pj_status_t) pjsua_acc_create_uac_contact( pj_pool_t *pool,
  * @param rdata		Incoming request.
  *
  * @return		PJ_SUCCESS on success, other on error.
+ *
+ * \par Python:
+ * This function is still experimental in Python:
+ * \code
+    uri = py_pjsua.acc_create_uas_contact(pool, acc_id, rdata)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_acc_create_uas_contact( pj_pool_t *pool,
 						   pj_str_t *contact,
@@ -2201,6 +2781,9 @@ PJ_DECL(pj_status_t) pjsua_acc_create_uas_contact( pj_pool_t *pool,
  * @param tp_id		The transport ID.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * Not yet implemented.
  */
 PJ_DECL(pj_status_t) pjsua_acc_set_transport(pjsua_acc_id acc_id,
 					     pjsua_transport_id tp_id);
@@ -2258,6 +2841,9 @@ typedef enum pjsua_call_media_status
 
 /**
  * This structure describes the information and current status of a call.
+ *
+ * \par Python:
+ * The type name is <tt>py_pjsua.Call_Info</tt>.
  */
 typedef struct pjsua_call_info
 {
@@ -2332,6 +2918,11 @@ typedef struct pjsua_call_info
  * Get maximum number of calls configured in pjsua.
  *
  * @return		Maximum number of calls configured.
+ *
+ * \par Python:
+ * \code
+    count = py_pjsua.call_get_max_count()
+ * \endcode
  */
 PJ_DECL(unsigned) pjsua_call_get_max_count(void);
 
@@ -2339,6 +2930,11 @@ PJ_DECL(unsigned) pjsua_call_get_max_count(void);
  * Get number of currently active calls.
  *
  * @return		Number of currently active calls.
+ *
+ * \par Python:
+ * \code
+    count = py_pjsua.call_get_count()
+ * \endcode
  */
 PJ_DECL(unsigned) pjsua_call_get_count(void);
 
@@ -2351,6 +2947,12 @@ PJ_DECL(unsigned) pjsua_call_get_count(void);
  *			On return, it contains the actual number of elements.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * This function takes no argument and return list of call Ids.
+ * \code
+    [call_ids] = py_pjsua.enum_calls()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_enum_calls(pjsua_call_id ids[],
 				      unsigned *count);
@@ -2370,6 +2972,15 @@ PJ_DECL(pj_status_t) pjsua_enum_calls(pjsua_call_id ids[],
  * @param p_call_id	Pointer to receive call identification.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The Python function returns (status, call_id) tuple:
+ * \code
+    status, call_id = py_pjsua.call_make_call(acc_id, dst_uri, options, 
+					      user_data, msg_data)
+ * \endcode
+ * Note: the \a user_data in Python function is an integer, and the 
+ * \a msg_data can be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_make_call(pjsua_acc_id acc_id,
 					  const pj_str_t *dst_uri,
@@ -2386,6 +2997,11 @@ PJ_DECL(pj_status_t) pjsua_call_make_call(pjsua_acc_id acc_id,
  * @param call_id	Call identification.
  *
  * @return		Non-zero if call is active.
+ *
+ * \par Python:
+ * \code
+    bool = py_pjsua.call_is_active(call_id)
+ * \endcode
  */
 PJ_DECL(pj_bool_t) pjsua_call_is_active(pjsua_call_id call_id);
 
@@ -2396,6 +3012,11 @@ PJ_DECL(pj_bool_t) pjsua_call_is_active(pjsua_call_id call_id);
  * @param call_id	Call identification.
  *
  * @return		Non-zero if yes.
+ *
+ * \par Python:
+ * \code
+    bool = py_pjsua.call_has_media(call_id)
+ * \endcode
  */
 PJ_DECL(pj_bool_t) pjsua_call_has_media(pjsua_call_id call_id);
 
@@ -2433,6 +3054,11 @@ PJ_DECL(pjmedia_transport*) pjsua_call_get_media_transport(pjsua_call_id cid);
  *
  * @return		Conference port ID, or PJSUA_INVALID_ID when the 
  *			media has not been established or is not active.
+ *
+ * \par Python:
+ * \code
+    slot = py_pjsua.call_get_conf_port(call_id)
+ * \endcode
  */
 PJ_DECL(pjsua_conf_port_id) pjsua_call_get_conf_port(pjsua_call_id call_id);
 
@@ -2443,6 +3069,12 @@ PJ_DECL(pjsua_conf_port_id) pjsua_call_get_conf_port(pjsua_call_id call_id);
  * @param info		Call info to be initialized.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    call_info = py_pjsua.call_get_info(call_id)
+ * \endcode
+ * \a call_info return value will be set to None if call_id is not valid.
  */
 PJ_DECL(pj_status_t) pjsua_call_get_info(pjsua_call_id call_id,
 					 pjsua_call_info *info);
@@ -2456,6 +3088,12 @@ PJ_DECL(pj_status_t) pjsua_call_get_info(pjsua_call_id call_id,
  * @param user_data	Arbitrary data to be attached to the call.
  *
  * @return		The user data.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_set_user_data(call_id, user_data)
+ * \endcode
+ * The \a user_data is an integer in the Python function.
  */
 PJ_DECL(pj_status_t) pjsua_call_set_user_data(pjsua_call_id call_id,
 					      void *user_data);
@@ -2468,6 +3106,12 @@ PJ_DECL(pj_status_t) pjsua_call_set_user_data(pjsua_call_id call_id,
  * @param call_id	Call identification.
  *
  * @return		The user data.
+ *
+ * \par Python:
+ * \code
+    user_data = py_pjsua.call_get_user_data(call_id)
+ * \endcode
+ * The \a user_data is an integer.
  */
 PJ_DECL(void*) pjsua_call_get_user_data(pjsua_call_id call_id);
 
@@ -2509,6 +3153,12 @@ PJ_DECL(pj_status_t) pjsua_call_get_rem_nat_type(pjsua_call_id call_id,
  *			response message.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_answer(call_id, code, reason, msg_data)
+ * \endcode
+ * Arguments \a reason and \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_answer(pjsua_call_id call_id, 
 				       unsigned code,
@@ -2533,6 +3183,12 @@ PJ_DECL(pj_status_t) pjsua_call_answer(pjsua_call_id call_id,
  *			request/response message.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_hangup(call_id, code, reason, msg_data)
+ * \endcode
+ * Arguments \a reason and \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_hangup(pjsua_call_id call_id,
 				       unsigned code,
@@ -2578,6 +3234,12 @@ PJ_DECL(pj_status_t) pjsua_call_process_redirect(pjsua_call_id call_id,
  *			the request.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_set_hold(call_id, msg_data)
+ * \endcode
+ * Argument \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_set_hold(pjsua_call_id call_id,
 					 const pjsua_msg_data *msg_data);
@@ -2596,6 +3258,12 @@ PJ_DECL(pj_status_t) pjsua_call_set_hold(pjsua_call_id call_id,
  *			the request.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_reinvite(call_id, unhold, msg_data)
+ * \endcode
+ * Argument \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_reinvite(pjsua_call_id call_id,
 					 pj_bool_t unhold,
@@ -2631,6 +3299,12 @@ PJ_DECL(pj_status_t) pjsua_call_update(pjsua_call_id call_id,
  *			the request.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_xfer(call_id, dest, msg_data)
+ * \endcode
+ * Argument \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_xfer(pjsua_call_id call_id, 
 				     const pj_str_t *dest,
@@ -2659,6 +3333,12 @@ PJ_DECL(pj_status_t) pjsua_call_xfer(pjsua_call_id call_id,
  *			the request.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_xfer_replaces(call_id, dest_call_id, options, msg_data)
+ * \endcode
+ * Argument \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_xfer_replaces(pjsua_call_id call_id, 
 					      pjsua_call_id dest_call_id,
@@ -2672,6 +3352,11 @@ PJ_DECL(pj_status_t) pjsua_call_xfer_replaces(pjsua_call_id call_id,
  * @param digits	DTMF string digits to be sent.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_dial_dtmf(call_id, digits)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_call_dial_dtmf(pjsua_call_id call_id, 
 					  const pj_str_t *digits);
@@ -2690,6 +3375,12 @@ PJ_DECL(pj_status_t) pjsua_call_dial_dtmf(pjsua_call_id call_id,
  *			the IM callback is called.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_send_im(call_id, mime_type, content, msg_data, user_data)
+ * \endcode
+ * Note that the \a user_data argument is an integer in Python.
  */
 PJ_DECL(pj_status_t) pjsua_call_send_im( pjsua_call_id call_id, 
 					 const pj_str_t *mime_type,
@@ -2708,6 +3399,12 @@ PJ_DECL(pj_status_t) pjsua_call_send_im( pjsua_call_id call_id,
  *			request.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.call_send_typing_ind(call_id, is_typing, msg_data)
+ * \endcode
+ * Argument \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_call_send_typing_ind(pjsua_call_id call_id, 
 						pj_bool_t is_typing,
@@ -2734,6 +3431,11 @@ PJ_DECL(pj_status_t) pjsua_call_send_request(pjsua_call_id call_id,
 /**
  * Terminate all calls. This will initiate #pjsua_call_hangup() for all
  * currently active calls. 
+ *
+ * \par Python:
+ * \code
+    py_pjsua.call_hangup_all()
+ * \endcode
  */
 PJ_DECL(void) pjsua_call_hangup_all(void);
 
@@ -2748,6 +3450,12 @@ PJ_DECL(void) pjsua_call_hangup_all(void);
  * @param indent	Spaces for left indentation.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * \code
+    string = py_pjsua.call_dump(call_id, with_media, max_len, indent)
+ * \endcode
+ * The \a max_len argument is the desired maximum length to be allocated.
  */
 PJ_DECL(pj_status_t) pjsua_call_dump(pjsua_call_id call_id, 
 				     pj_bool_t with_media, 
@@ -2785,8 +3493,7 @@ PJ_DECL(pj_status_t) pjsua_call_dump(pjsua_call_id call_id,
 
 /**
  * This specifies how long the library should retry resending SUBSCRIBE
- * if the previous SUBSCRIBE failed. This also controls the duration 
- * before failed PUBLISH request will be retried.
+ * if the previous SUBSCRIBE failed.
  *
  * Default: 300 seconds
  */
@@ -2800,6 +3507,14 @@ PJ_DECL(pj_status_t) pjsua_call_dump(pjsua_call_id call_id,
  * the buddy list with #pjsua_buddy_add(). Application MUST initialize
  * the structure with #pjsua_buddy_config_default() to initialize this
  * structure with default configuration.
+ *
+ * \par Python:
+ * In Python this structure is <tt>py_pjsua.Buddy_Config</tt>. However
+ * it is recommended that application instantiates the buddy config
+ * by calling:
+ * \code
+    buddy_cfg = py_pjsua.buddy_config_default()
+ * \endcode
  */
 typedef struct pjsua_buddy_config
 {
@@ -2850,6 +3565,9 @@ typedef enum pjsua_buddy_status
 /**
  * This structure describes buddy info, which can be retrieved by calling
  * #pjsua_buddy_get_info().
+ *
+ * \par Python:
+ * This structure in Python is <tt>py_pjsua.Buddy_Info</tt>.
  */
 typedef struct pjsua_buddy_info
 {
@@ -2896,11 +3614,6 @@ typedef struct pjsua_buddy_info
     pjsip_evsub_state	sub_state;
 
     /**
-     * String representation of subscription state.
-     */
-    const char	       *sub_state_name;
-
-    /**
      * Specifies the last presence subscription terminatino reason. If 
      * presence subscription is currently active, the value will be empty.
      */
@@ -2912,11 +3625,6 @@ typedef struct pjsua_buddy_info
     pjrpid_element	rpid;
 
     /**
-     * Extended presence info.
-     */
-    pjsip_pres_status	pres_status;
-
-    /**
      * Internal buffer.
      */
     char		buf_[512];
@@ -2926,6 +3634,11 @@ typedef struct pjsua_buddy_info
 
 /**
  * Set default values to the buddy config.
+ *
+ * \par Python:
+ * \code
+    buddy_cfg = py_pjsua.buddy_config_default()
+ * \endcode
  */
 PJ_DECL(void) pjsua_buddy_config_default(pjsua_buddy_config *cfg);
 
@@ -2934,6 +3647,11 @@ PJ_DECL(void) pjsua_buddy_config_default(pjsua_buddy_config *cfg);
  * Get total number of buddies.
  *
  * @return		Number of buddies.
+ *
+ * \par Python:
+ * \code
+    buddy_count = py_pjsua.get_buddy_count()
+ * \endcode
  */
 PJ_DECL(unsigned) pjsua_get_buddy_count(void);
 
@@ -2944,6 +3662,11 @@ PJ_DECL(unsigned) pjsua_get_buddy_count(void);
  * @param buddy_id	Buddy ID to check.
  *
  * @return		Non-zero if buddy ID is valid.
+ *
+ * \par Python:
+ * \code
+    is_valid = py_pjsua.buddy_is_valid(buddy_id)
+ * \endcode
  */
 PJ_DECL(pj_bool_t) pjsua_buddy_is_valid(pjsua_buddy_id buddy_id);
 
@@ -2959,6 +3682,12 @@ PJ_DECL(pj_bool_t) pjsua_buddy_is_valid(pjsua_buddy_id buddy_id);
  *			that have been initialized.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The Python function takes no argument and returns list of buddy IDs:
+ * \code
+    [buddy_ids] = py_pjsua.enum_buddies()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_enum_buddies(pjsua_buddy_id ids[],
 					unsigned *count);
@@ -2980,6 +3709,12 @@ PJ_DECL(pjsua_buddy_id) pjsua_buddy_find(const pj_str_t *uri);
  * @param info		Pointer to receive information about buddy.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    buddy_info = py_pjsua.buddy_get_info(buddy_id)
+ * \endcode
+ * The function returns None if buddy_id is not valid.
  */
 PJ_DECL(pj_status_t) pjsua_buddy_get_info(pjsua_buddy_id buddy_id,
 					  pjsua_buddy_info *info);
@@ -3016,6 +3751,12 @@ PJ_DECL(void*) pjsua_buddy_get_user_data(pjsua_buddy_id buddy_id);
  * @param p_buddy_id	Pointer to receive buddy ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function returns (status, buddy_id) tuple:
+ * \code
+    status, buddy_id = py_pjsua.buddy_add(buddy_cfg)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_buddy_add(const pjsua_buddy_config *buddy_cfg,
 				     pjsua_buddy_id *p_buddy_id);
@@ -3028,6 +3769,11 @@ PJ_DECL(pj_status_t) pjsua_buddy_add(const pjsua_buddy_config *buddy_cfg,
  * @param buddy_id	Buddy identification.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.buddy_del(buddy_id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_buddy_del(pjsua_buddy_id buddy_id);
 
@@ -3042,6 +3788,11 @@ PJ_DECL(pj_status_t) pjsua_buddy_del(pjsua_buddy_id buddy_id);
  *			the specified buddy.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.buddy_subscribe_pres(buddy_id, subscribe)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_buddy_subscribe_pres(pjsua_buddy_id buddy_id,
 						pj_bool_t subscribe);
@@ -3103,6 +3854,11 @@ PJ_DECL(pj_status_t) pjsua_pres_notify(pjsua_acc_id acc_id,
  * Dump presence subscriptions to log.
  *
  * @param verbose	Yes or no.
+ *
+ * \par Python:
+ * \code
+    py_pjsua.pres_dump()
+ * \endcode
  */
 PJ_DECL(void) pjsua_pres_dump(pj_bool_t verbose);
 
@@ -3130,6 +3886,12 @@ extern const pjsip_method pjsip_message_method;
  *			the IM callback is called.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.im_send(acc_id, to, mime_type, content, msg_data, user_data)
+ * \endcode
+ * Arguments \a mime_type and \a msg_data may be set to None if not required.
  */
 PJ_DECL(pj_status_t) pjsua_im_send(pjsua_acc_id acc_id, 
 				   const pj_str_t *to,
@@ -3150,6 +3912,12 @@ PJ_DECL(pj_status_t) pjsua_im_send(pjsua_acc_id acc_id,
  *			request.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.im_typing(acc_id, to, is_typing, msg_data)
+ * \endcode
+ * Argument \a msg_data may be set to None if not requried.
  */
 PJ_DECL(pj_status_t) pjsua_im_typing(pjsua_acc_id acc_id, 
 				     const pj_str_t *to, 
@@ -3300,6 +4068,14 @@ PJ_DECL(pj_status_t) pjsua_im_typing(pjsua_acc_id acc_id,
  * This structure describes media configuration, which will be specified
  * when calling #pjsua_init(). Application MUST initialize this structure
  * by calling #pjsua_media_config_default().
+ *
+ * \par Python:
+ * This data type in Python is <tt>py_pjsua.Media_Config</tt>. To create
+ * an object of this type, it is recommended to call 
+ * <tt>py_pjsua.media_config_default()</tt> function instead:
+ * \code
+    media_cfg = py_pjsua.media_config_default()
+ * \endcode
  */
 struct pjsua_media_config
 {
@@ -3424,20 +4200,6 @@ struct pjsua_media_config
      */
     unsigned		ec_tail_len;
 
-    /**
-     * Audio capture buffer length, in milliseconds.
-     *
-     * Default: PJMEDIA_SND_DEFAULT_REC_LATENCY
-     */
-    unsigned		snd_rec_latency;
-
-    /**
-     * Audio playback buffer length, in milliseconds.
-     *
-     * Default: PJMEDIA_SND_DEFAULT_PLAY_LATENCY
-     */
-    unsigned		snd_play_latency;
-
     /** 
      * Jitter buffer initial prefetch delay in msec. The value must be
      * between jb_min_pre and jb_max_pre below.
@@ -3473,16 +4235,9 @@ struct pjsua_media_config
     pj_bool_t		enable_ice;
 
     /**
-     * Set the maximum number of host candidates.
-     *
-     * Default: -1 (maximum not set)
+     * Disable ICE host candidates.
      */
-    int			ice_max_host_cands;
-
-    /**
-     * ICE session options.
-     */
-    pj_ice_sess_options	ice_opt;
+    pj_bool_t		ice_no_host_cands;
 
     /**
      * Disable RTCP component.
@@ -3517,10 +4272,9 @@ struct pjsua_media_config
 
     /**
      * Specify idle time of sound device before it is automatically closed,
-     * in seconds. Use value -1 to disable the auto-close feature of sound
-     * device
+     * in seconds.
      *
-     * Default : 1
+     * Default : -1 (Disable the auto-close feature of sound device)
      */
     int			snd_auto_close_time;
 };
@@ -3530,6 +4284,11 @@ struct pjsua_media_config
  * Use this function to initialize media config.
  *
  * @param cfg	The media config to be initialized.
+ *
+ * \par Python:
+ * \code
+    media_cfg = py_pjsua.media_config_default()
+ * \endcode
  */
 PJ_DECL(void) pjsua_media_config_default(pjsua_media_config *cfg);
 
@@ -3562,6 +4321,9 @@ typedef struct pjsua_codec_info
  * This structure descibes information about a particular media port that
  * has been registered into the conference bridge. Application can query
  * this info by calling #pjsua_conf_get_port_info().
+ *
+ * \par Python:
+ * In Python, this type is <tt>py_pjsua.Conf_Port_Info</tt>.
  */
 typedef struct pjsua_conf_port_info
 {
@@ -3597,6 +4359,9 @@ typedef struct pjsua_conf_port_info
 /**
  * This structure holds information about custom media transport to
  * be registered to pjsua.
+ *
+ * \par Python:
+ * Not applicable.
  */
 typedef struct pjsua_media_transport
 {
@@ -3620,6 +4385,11 @@ typedef struct pjsua_media_transport
  * Get maxinum number of conference ports.
  *
  * @return		Maximum number of ports in the conference bridge.
+ *
+ * \par Python:
+ * \code
+    port_count = py_pjsua.conf_get_max_ports()
+ * \endcode
  */
 PJ_DECL(unsigned) pjsua_conf_get_max_ports(void);
 
@@ -3628,6 +4398,11 @@ PJ_DECL(unsigned) pjsua_conf_get_max_ports(void);
  * Get current number of active ports in the bridge.
  *
  * @return		The number.
+ *
+ * \par Python:
+ * \code
+    count = py_pjsua.conf_get_active_ports()
+ * \endcode
  */
 PJ_DECL(unsigned) pjsua_conf_get_active_ports(void);
 
@@ -3641,6 +4416,12 @@ PJ_DECL(unsigned) pjsua_conf_get_active_ports(void);
  *			that have been initialized.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The Python functions returns list of conference port Ids:
+ * \code
+    [port_ids] = py_pjsua.enum_conf_ports()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_enum_conf_ports(pjsua_conf_port_id id[],
 					   unsigned *count);
@@ -3653,6 +4434,12 @@ PJ_DECL(pj_status_t) pjsua_enum_conf_ports(pjsua_conf_port_id id[],
  * @param info		Pointer to store the port info.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    port_info = py_pjsua.conf_get_port_info(port_id)
+ * \endcode
+ * The function will return None if \a port_id is not valid.
  */
 PJ_DECL(pj_status_t) pjsua_conf_get_port_info( pjsua_conf_port_id port_id,
 					       pjsua_conf_port_info *info);
@@ -3671,6 +4458,9 @@ PJ_DECL(pj_status_t) pjsua_conf_get_port_info( pjsua_conf_port_id port_id,
  *			slot id.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Not applicable (for now)
  */
 PJ_DECL(pj_status_t) pjsua_conf_add_port(pj_pool_t *pool,
 					 pjmedia_port *port,
@@ -3685,6 +4475,11 @@ PJ_DECL(pj_status_t) pjsua_conf_add_port(pj_pool_t *pool,
  * @param port_id	The slot id of the port to be removed.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.conf_remove_port(port_id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_conf_remove_port(pjsua_conf_port_id port_id);
 
@@ -3704,6 +4499,11 @@ PJ_DECL(pj_status_t) pjsua_conf_remove_port(pjsua_conf_port_id port_id);
  * @param sink		Port ID of the destination media/received.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.conf_connect(source, sink)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_conf_connect(pjsua_conf_port_id source,
 					pjsua_conf_port_id sink);
@@ -3716,6 +4516,11 @@ PJ_DECL(pj_status_t) pjsua_conf_connect(pjsua_conf_port_id source,
  * @param sink		Port ID of the destination media/received.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.conf_disconnect(source, sink)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_conf_disconnect(pjsua_conf_port_id source,
 					   pjsua_conf_port_id sink);
@@ -3730,6 +4535,9 @@ PJ_DECL(pj_status_t) pjsua_conf_disconnect(pjsua_conf_port_id source,
  *			adjustment, while value 0 means to mute the port.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Not implemented (yet)
  */
 PJ_DECL(pj_status_t) pjsua_conf_adjust_tx_level(pjsua_conf_port_id slot,
 						float level);
@@ -3743,6 +4551,9 @@ PJ_DECL(pj_status_t) pjsua_conf_adjust_tx_level(pjsua_conf_port_id slot,
  *			adjustment, while value 0 means to mute the port.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Not implemented (yet)
  */
 PJ_DECL(pj_status_t) pjsua_conf_adjust_rx_level(pjsua_conf_port_id slot,
 						float level);
@@ -3761,6 +4572,9 @@ PJ_DECL(pj_status_t) pjsua_conf_adjust_rx_level(pjsua_conf_port_id slot,
  *			port to the bridge).
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * Not implemented (yet)
  */
 PJ_DECL(pj_status_t) pjsua_conf_get_signal_level(pjsua_conf_port_id slot,
 						 unsigned *tx_level,
@@ -3784,6 +4598,12 @@ PJ_DECL(pj_status_t) pjsua_conf_get_signal_level(pjsua_conf_port_id slot,
  * @param p_id		Pointer to receive player ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function returns (status, id) tuple:
+ * \code
+    status, id = py_pjsua.player_create(filename, options)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_player_create(const pj_str_t *filename,
 					 unsigned options,
@@ -3804,6 +4624,9 @@ PJ_DECL(pj_status_t) pjsua_player_create(const pj_str_t *filename,
  * @param p_id		Optional pointer to receive player ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Not implemented yet.
  */
 PJ_DECL(pj_status_t) pjsua_playlist_create(const pj_str_t file_names[],
 					   unsigned file_count,
@@ -3817,6 +4640,11 @@ PJ_DECL(pj_status_t) pjsua_playlist_create(const pj_str_t file_names[],
  * @param id		The file player ID.
  *
  * @return		Conference port ID associated with this player.
+ *
+ * \par Python:
+ * \code
+    port_id = py_pjsua.player_get_conf_port(id)
+ * \endcode
  */
 PJ_DECL(pjsua_conf_port_id) pjsua_player_get_conf_port(pjsua_player_id id);
 
@@ -3828,6 +4656,9 @@ PJ_DECL(pjsua_conf_port_id) pjsua_player_get_conf_port(pjsua_player_id id);
  * @param p_port	The media port associated with the player.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * Not applicable.
  */
 PJ_DECL(pj_status_t) pjsua_player_get_port(pjsua_player_id id,
 					   pjmedia_port **p_port);
@@ -3840,6 +4671,11 @@ PJ_DECL(pj_status_t) pjsua_player_get_port(pjsua_player_id id,
  *			specify zero to re-start the playback.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.player_set_pos(id, samples)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_player_set_pos(pjsua_player_id id,
 					  pj_uint32_t samples);
@@ -3852,6 +4688,11 @@ PJ_DECL(pj_status_t) pjsua_player_set_pos(pjsua_player_id id,
  * @param id		The file player ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.player_destroy(id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_player_destroy(pjsua_player_id id);
 
@@ -3881,6 +4722,12 @@ PJ_DECL(pj_status_t) pjsua_player_destroy(pjsua_player_id id);
  * @param p_id		Pointer to receive the recorder instance.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status, id = py_pjsua.recorder_create(filename, enc_type, enc_param, max_size, options)
+ * \endcode
+ * The \a enc_param is a string in Python.
  */
 PJ_DECL(pj_status_t) pjsua_recorder_create(const pj_str_t *filename,
 					   unsigned enc_type,
@@ -3896,6 +4743,11 @@ PJ_DECL(pj_status_t) pjsua_recorder_create(const pj_str_t *filename,
  * @param id		The recorder ID.
  *
  * @return		Conference port ID associated with this recorder.
+ *
+ * \par Python:
+ * \code
+    port_id = py_pjsua.recorder_get_conf_port(id)
+ * \endcode
  */
 PJ_DECL(pjsua_conf_port_id) pjsua_recorder_get_conf_port(pjsua_recorder_id id);
 
@@ -3907,6 +4759,9 @@ PJ_DECL(pjsua_conf_port_id) pjsua_recorder_get_conf_port(pjsua_recorder_id id);
  * @param p_port	The media port associated with the recorder.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * Not applicable.
  */
 PJ_DECL(pj_status_t) pjsua_recorder_get_port(pjsua_recorder_id id,
 					     pjmedia_port **p_port);
@@ -3918,6 +4773,11 @@ PJ_DECL(pj_status_t) pjsua_recorder_get_port(pjsua_recorder_id id,
  * @param id		The recorder ID.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.recorder_destroy(id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_recorder_destroy(pjsua_recorder_id id);
 
@@ -3927,7 +4787,7 @@ PJ_DECL(pj_status_t) pjsua_recorder_destroy(pjsua_recorder_id id);
  */
 
 /**
- * Enum all audio devices installed in the system.
+ * Enum all sound devices installed in the system.
  *
  * @param info		Array of info to be initialized.
  * @param count		On input, specifies max elements in the array.
@@ -3935,22 +4795,19 @@ PJ_DECL(pj_status_t) pjsua_recorder_destroy(pjsua_recorder_id id);
  *			that have been initialized.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
- */
-PJ_DECL(pj_status_t) pjsua_enum_aud_devs(pjmedia_aud_dev_info info[],
-					 unsigned *count);
-
-/**
- * Enum all sound devices installed in the system (old API).
  *
- * @param info		Array of info to be initialized.
- * @param count		On input, specifies max elements in the array.
- *			On return, it contains actual number of elements
- *			that have been initialized.
  *
- * @return		PJ_SUCCESS on success, or the appropriate error code.
+ * \par Python:
+ * The function returns list of sound device info:
+ * \code
+    [dev_infos] = py_pjsua.enum_snd_devs()
+ * \endcode
+ *
  */
 PJ_DECL(pj_status_t) pjsua_enum_snd_devs(pjmedia_snd_dev_info info[],
 					 unsigned *count);
+
+
 
 /**
  * Get currently active sound devices. If sound devices has not been created
@@ -3963,6 +4820,12 @@ PJ_DECL(pj_status_t) pjsua_enum_snd_devs(pjmedia_snd_dev_info info[],
  *			device ID of the playback device.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The function takes no argument and return an (integer,integer) tuple:
+ * \code
+    capture_dev, playback_dev = py_pjsua.get_snd_dev()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_get_snd_dev(int *capture_dev,
 				       int *playback_dev);
@@ -3976,6 +4839,11 @@ PJ_DECL(pj_status_t) pjsua_get_snd_dev(int *capture_dev,
  * @param playback_dev	Device ID of the playback device.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.set_snd_dev(capture_dev, playback_dev)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_set_snd_dev(int capture_dev,
 				       int playback_dev);
@@ -3987,6 +4855,11 @@ PJ_DECL(pj_status_t) pjsua_set_snd_dev(int capture_dev,
  * any hardware.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.set_null_snd_dev()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_set_null_snd_dev(void);
 
@@ -3998,27 +4871,15 @@ PJ_DECL(pj_status_t) pjsua_set_null_snd_dev(void);
  * @return		The port interface of the conference bridge, 
  *			so that application can connect this to it's own
  *			sound device or master port.
+ *
+ * \par Python:
+ * Not applicable (for now).
  */
 PJ_DECL(pjmedia_port*) pjsua_set_no_snd_dev(void);
 
 
 /**
- * Change the echo cancellation settings.
- *
- * The behavior of this function depends on whether the sound device is
- * currently active, and if it is, whether device or software AEC is 
- * being used. 
- *
- * If the sound device is currently active, and if the device supports AEC,
- * this function will forward the change request to the device and it will
- * be up to the device on whether support the request. If software AEC is
- * being used (the software EC will be used if the device does not support
- * AEC), this function will change the software EC settings. In all cases,
- * the setting will be saved for future opening of the sound device.
- *
- * If the sound device is not currently active, this will only change the
- * default AEC settings and the setting will be applied next time the 
- * sound device is opened.
+ * Configure the echo canceller tail length of the sound port.
  *
  * @param tail_ms	The tail length, in miliseconds. Set to zero to
  *			disable AEC.
@@ -4026,83 +4887,30 @@ PJ_DECL(pjmedia_port*) pjsua_set_no_snd_dev(void);
  *			Normally the value should be zero.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.set_ec(tail_ms, options)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_set_ec(unsigned tail_ms, unsigned options);
 
 
 /**
- * Get current echo canceller tail length. 
+ * Get current echo canceller tail length.
  *
  * @param p_tail_ms	Pointer to receive the tail length, in miliseconds. 
  *			If AEC is disabled, the value will be zero.
  *
  * @return		PJ_SUCCESS on success.
+ *
+ * \par Python:
+ * \code
+    tail_ms = py_pjsua.get_ec_tail()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_get_ec_tail(unsigned *p_tail_ms);
 
-
-/**
- * Check whether the sound device is currently active. The sound device
- * may be inactive if the application has set the auto close feature to
- * non-zero (the snd_auto_close_time setting in #pjsua_media_config), or
- * if null sound device or no sound device has been configured via the
- * #pjsua_set_no_snd_dev() function.
- */
-PJ_DECL(pj_bool_t) pjsua_snd_is_active(void);
-
-    
-/**
- * Configure sound device setting to the sound device being used. If sound 
- * device is currently active, the function will forward the setting to the
- * sound device instance to be applied immediately, if it supports it. 
- *
- * The setting will be saved for future opening of the sound device, if the 
- * "keep" argument is set to non-zero. If the sound device is currently
- * inactive, and the "keep" argument is false, this function will return
- * error.
- * 
- * Note that in case the setting is kept for future use, it will be applied
- * to any devices, even when application has changed the sound device to be
- * used.
- *
- * Note also that the echo cancellation setting should be set with 
- * #pjsua_set_ec() API instead.
- *
- * See also #pjmedia_aud_stream_set_cap() for more information about setting
- * an audio device capability.
- *
- * @param cap		The sound device setting to change.
- * @param pval		Pointer to value. Please see #pjmedia_aud_dev_cap
- *			documentation about the type of value to be 
- *			supplied for each setting.
- * @param keep		Specify whether the setting is to be kept for future
- *			use.
- *
- * @return		PJ_SUCCESS on success or the appropriate error code.
- */
-PJ_DECL(pj_status_t) pjsua_snd_set_setting(pjmedia_aud_dev_cap cap,
-					   const void *pval,
-					   pj_bool_t keep);
-
-/**
- * Retrieve a sound device setting. If sound device is currently active,
- * the function will forward the request to the sound device. If sound device
- * is currently inactive, and if application had previously set the setting
- * and mark the setting as kept, then that setting will be returned.
- * Otherwise, this function will return error.
- *
- * Note that echo cancellation settings should be retrieved with 
- * #pjsua_get_ec_tail() API instead.
- *
- * @param cap		The sound device setting to retrieve.
- * @param pval		Pointer to receive the value. 
- *			Please see #pjmedia_aud_dev_cap documentation about
- *			the type of value to be supplied for each setting.
- *
- * @return		PJ_SUCCESS on success or the appropriate error code.
- */
-PJ_DECL(pj_status_t) pjsua_snd_get_setting(pjmedia_aud_dev_cap cap,
-					   void *pval);
 
 
 /*****************************************************************************
@@ -4118,6 +4926,12 @@ PJ_DECL(pj_status_t) pjsua_snd_get_setting(pjmedia_aud_dev_cap cap,
  *			that have been initialized.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * This function takes no argument and returns list of codec infos:
+ * \code
+    [codec_info] = py_pjsua.enum_codecs()
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_enum_codecs( pjsua_codec_info id[],
 				        unsigned *count );
@@ -4133,6 +4947,11 @@ PJ_DECL(pj_status_t) pjsua_enum_codecs( pjsua_codec_info id[],
  *			the codec.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * \code
+    status = py_pjsua.codec_set_priority(codec_id, priority)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_codec_set_priority( const pj_str_t *codec_id,
 					       pj_uint8_t priority );
@@ -4145,6 +4964,12 @@ PJ_DECL(pj_status_t) pjsua_codec_set_priority( const pj_str_t *codec_id,
  * @param param		Structure to receive codec parameters.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The Python function is experimental:
+ * \code
+    codec_param = py_pjsua.codec_get_param(codec_id)
+ * \endcode
  */
 PJ_DECL(pj_status_t) pjsua_codec_get_param( const pj_str_t *codec_id,
 					    pjmedia_codec_param *param );
@@ -4157,6 +4982,13 @@ PJ_DECL(pj_status_t) pjsua_codec_get_param( const pj_str_t *codec_id,
  * @param param		Codec parameter to set.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * The Python function is experimental:
+ * \code
+    status = py_pjsua.codec_set_param(codec_id, param)
+ * \endcode
+
  */
 PJ_DECL(pj_status_t) pjsua_codec_set_param( const pj_str_t *codec_id,
 					    const pjmedia_codec_param *param);
@@ -4173,6 +5005,9 @@ PJ_DECL(pj_status_t) pjsua_codec_set_param( const pj_str_t *codec_id,
  *			sockets.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Not implemented yet.
  */
 PJ_DECL(pj_status_t) 
 pjsua_media_transports_create(const pjsua_transport_config *cfg);
@@ -4190,6 +5025,9 @@ pjsua_media_transports_create(const pjsua_transport_config *cfg);
  *			destroyed when pjsua is shutdown.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
+ *
+ * \par Python:
+ * Note applicable.
  */
 PJ_DECL(pj_status_t) 
 pjsua_media_transports_attach( pjsua_media_transport tp[],

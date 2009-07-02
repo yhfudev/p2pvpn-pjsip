@@ -149,18 +149,17 @@ PJ_DECL(void) pj_xml_add_node( pj_xml_node *parent, pj_xml_node *node );
 PJ_DECL(void) pj_xml_add_attr( pj_xml_node *node, pj_xml_attr *attr );
 
 /**
- * Find first direct child node with the specified name.
+ * Find first node with the specified name.
  *
  * @param parent    Parent node.
  * @param name	    Node name to find.
  *
  * @return	    XML node found or NULL.
  */
-PJ_DECL(pj_xml_node*) pj_xml_find_node(const pj_xml_node *parent, 
-				       const pj_str_t *name);
+PJ_DECL(pj_xml_node*) pj_xml_find_node(pj_xml_node *parent, const pj_str_t *name);
 
 /**
- * Find next direct child node with the specified name.
+ * Find first node with the specified name.
  *
  * @param parent    Parent node.
  * @param node	    node->next is the starting point.
@@ -168,26 +167,11 @@ PJ_DECL(pj_xml_node*) pj_xml_find_node(const pj_xml_node *parent,
  *
  * @return	    XML node found or NULL.
  */
-PJ_DECL(pj_xml_node*) pj_xml_find_next_node(const pj_xml_node *parent, 
-					    const pj_xml_node *node,
+PJ_DECL(pj_xml_node*) pj_xml_find_next_node(pj_xml_node *parent, pj_xml_node *node,
 					    const pj_str_t *name);
 
 /**
- * Recursively find the first node with the specified name in the child nodes
- * and their children.
- *
- * @param parent    Parent node.
- * @param name	    Node name to find.
- *
- * @return	    XML node found or NULL.
- */
-PJ_DECL(pj_xml_node*) pj_xml_find_node_rec(const pj_xml_node *parent, 
-					   const pj_str_t *name);
-
-
-/**
- * Find first attribute within a node with the specified name and optional 
- * value.
+ * Find first attribute within a node with the specified name and optional value.
  *
  * @param node	    XML Node.
  * @param name	    Attribute name to find.
@@ -195,8 +179,7 @@ PJ_DECL(pj_xml_node*) pj_xml_find_node_rec(const pj_xml_node *parent,
  *
  * @return	    XML attribute found, or NULL.
  */
-PJ_DECL(pj_xml_attr*) pj_xml_find_attr(const pj_xml_node *node, 
-				       const pj_str_t *name,
+PJ_DECL(pj_xml_attr*) pj_xml_find_attr(pj_xml_node *node, const pj_str_t *name,
 				       const pj_str_t *value);
 
 
@@ -204,37 +187,15 @@ PJ_DECL(pj_xml_attr*) pj_xml_find_attr(const pj_xml_node *node,
  * Find a direct child node with the specified name and match the function.
  *
  * @param parent    Parent node.
- * @param name	    Optional name. If this is NULL, the name will not be
- *		    matched.
+ * @param name	    Optional name.
  * @param data	    Data to be passed to matching function.
  * @param match	    Optional matching function.
  *
  * @return	    The first matched node, or NULL.
  */
-PJ_DECL(pj_xml_node*) pj_xml_find( const pj_xml_node *parent, 
-				   const pj_str_t *name,
+PJ_DECL(pj_xml_node*) pj_xml_find( pj_xml_node *parent, const pj_str_t *name,
 				   const void *data, 
-				   pj_bool_t (*match)(const pj_xml_node *, 
-						      const void*));
-
-
-/**
- * Recursively find a child node with the specified name and match the 
- * function.
- *
- * @param parent    Parent node.
- * @param name	    Optional name. If this is NULL, the name will not be
- *		    matched.
- * @param data	    Data to be passed to matching function.
- * @param match	    Optional matching function.
- *
- * @return	    The first matched node, or NULL.
- */
-PJ_DECL(pj_xml_node*) pj_xml_find_rec(const pj_xml_node *parent, 
-				      const pj_str_t *name,
-				      const void *data, 
-				      pj_bool_t (*match)(const pj_xml_node*, 
-							 const void*));
+				   pj_bool_t (*match)(pj_xml_node *, const void*));
 
 
 /**

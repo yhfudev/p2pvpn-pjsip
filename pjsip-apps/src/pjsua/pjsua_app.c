@@ -58,7 +58,6 @@ static struct app_config
     pjsua_logging_config    log_cfg;
     pjsua_media_config	    media_cfg;
     pj_bool_t		    no_refersub;
-    pj_bool_t		    ipv6;
     pj_bool_t		    no_tcp;
     pj_bool_t		    no_udp;
     pj_bool_t		    use_tls;
@@ -139,7 +138,6 @@ static void stereo_demo();
 #ifdef TRANSPORT_ADAPTER_SAMPLE
 static pj_status_t transport_adapter_sample(void);
 #endif
-static pj_status_t create_ipv6_media_transports(void);
 pj_status_t app_destroy(void);
 
 static void ringback_start(pjsua_call_id call_id);
@@ -197,15 +195,11 @@ static void usage(void)
     puts  ("  --next-account      Add more account");
     puts  ("");
     puts  ("Transport Options:");
-#if defined(PJ_HAS_IPV6) && PJ_HAS_IPV6
-    puts  ("  --ipv6              Use IPv6 instead for SIP and media.");
-#endif
     puts  ("  --local-port=port   Set TCP/UDP port. This implicitly enables both ");
     puts  ("                      TCP and UDP transports on the specified port, unless");
     puts  ("                      if TCP or UDP is disabled.");
     puts  ("  --ip-addr=IP        Use the specifed address as SIP and RTP addresses.");
     puts  ("                      (Hint: the IP may be the public IP of the NAT/router)");
-    puts  ("  --bound-addr=IP     Bind transports to this IP interface");
     puts  ("  --no-tcp            Disable TCP transport.");
     puts  ("  --no-udp            Disable UDP transport.");
     puts  ("  --nameserver=NS     Add the specified nameserver to enable SRV resolution");
@@ -264,8 +258,7 @@ static void usage(void)
     puts  ("");
     puts  ("Media Transport Options:");
     puts  ("  --use-ice           Enable ICE (default:no)");
-    puts  ("  --ice-regular       Use ICE regular nomination (default: aggressive)");
-    puts  ("  --ice-max-hosts=N   Set maximum number of ICE host candidates");
+    puts  ("  --ice-no-host       Disable ICE host candidates (default: no)");
     puts  ("  --ice-no-rtcp       Disable RTCP component in ICE (default: no)");
     puts  ("  --rtp-port=N        Base port to try for RTP (default=4000)");
     puts  ("  --rx-drop-pct=PCT   Drop PCT percent of RX RTP (for pkt lost sim, default: 0)");
@@ -471,14 +464,14 @@ static pj_status_t parse_args(int argc, char *argv[],
 	   OPT_HELP, OPT_VERSION, OPT_NULL_AUDIO, OPT_SND_AUTO_CLOSE,
 	   OPT_LOCAL_PORT, OPT_IP_ADDR, OPT_PROXY, OPT_OUTBOUND_PROXY, 
 	   OPT_REGISTRAR, OPT_REG_TIMEOUT, OPT_PUBLISH, OPT_ID, OPT_CONTACT,
-	   OPT_BOUND_ADDR, OPT_CONTACT_PARAMS,
+	   OPT_CONTACT_PARAMS,
 	   OPT_100REL, OPT_USE_IMS, OPT_REALM, OPT_USERNAME, OPT_PASSWORD,
 	   OPT_NAMESERVER, OPT_STUN_DOMAIN, OPT_STUN_SRV,
 	   OPT_ADD_BUDDY, OPT_OFFER_X_MS_MSG, OPT_NO_PRESENCE,
 	   OPT_AUTO_ANSWER, OPT_AUTO_PLAY, OPT_AUTO_PLAY_HANGUP, OPT_AUTO_LOOP,
 	   OPT_AUTO_CONF, OPT_CLOCK_RATE, OPT_SND_CLOCK_RATE, OPT_STEREO,
-	   OPT_USE_ICE, OPT_ICE_REGULAR, OPT_USE_SRTP, OPT_SRTP_SECURE,
-	   OPT_USE_TURN, OPT_ICE_MAX_HOSTS, OPT_ICE_NO_RTCP, OPT_TURN_SRV, 
+	   OPT_USE_ICE, OPT_USE_SRTP, OPT_SRTP_SECURE,
+	   OPT_USE_TURN, OPT_ICE_NO_HOST, OPT_ICE_NO_RTCP, OPT_TURN_SRV, 
 	   OPT_TURN_TCP, OPT_TURN_USER, OPT_TURN_PASSWD,
 	   OPT_PLAY_FILE, OPT_PLAY_TONE, OPT_RTP_PORT, OPT_ADD_CODEC, 
 	   OPT_ILBC_MODE, OPT_REC_FILE, OPT_AUTO_REC,
@@ -492,7 +485,7 @@ static pj_status_t parse_args(int argc, char *argv[],
 	   OPT_TLS_NEG_TIMEOUT, OPT_TLS_SRV_NAME,
 	   OPT_CAPTURE_DEV, OPT_PLAYBACK_DEV,
 	   OPT_CAPTURE_LAT, OPT_PLAYBACK_LAT, OPT_NO_TONES, OPT_JB_MAX_SIZE,
-	   OPT_STDOUT_REFRESH, OPT_STDOUT_REFRESH_TEXT, OPT_IPV6,
+	   OPT_STDOUT_REFRESH, OPT_STDOUT_REFRESH_TEXT,
 #ifdef _IONBF
 	   OPT_STDOUT_NO_BUF,
 #endif
@@ -515,7 +508,6 @@ static pj_status_t parse_args(int argc, char *argv[],
 	{ "null-audio", 0, 0, OPT_NULL_AUDIO},
 	{ "local-port", 1, 0, OPT_LOCAL_PORT},
 	{ "ip-addr",	1, 0, OPT_IP_ADDR},
-	{ "bound-addr", 1, 0, OPT_BOUND_ADDR},
 	{ "no-tcp",     0, 0, OPT_NO_TCP},
 	{ "no-udp",     0, 0, OPT_NO_UDP},
 	{ "norefersub", 0, 0, OPT_NOREFERSUB},
@@ -554,9 +546,8 @@ static pj_status_t parse_args(int argc, char *argv[],
 	{ "rtp-port",	1, 0, OPT_RTP_PORT},
 
 	{ "use-ice",    0, 0, OPT_USE_ICE},
-	{ "ice-regular",0, 0, OPT_ICE_REGULAR},
 	{ "use-turn",	0, 0, OPT_USE_TURN},
-	{ "ice-max-hosts",1, 0, OPT_ICE_MAX_HOSTS},
+	{ "ice-no-host",0, 0, OPT_ICE_NO_HOST},
 	{ "ice-no-rtcp",0, 0, OPT_ICE_NO_RTCP},
 	{ "turn-srv",	1, 0, OPT_TURN_SRV},
 	{ "turn-tcp",	0, 0, OPT_TURN_TCP},
@@ -604,9 +595,6 @@ static pj_status_t parse_args(int argc, char *argv[],
 	{ "snd-auto-close", 1, 0, OPT_SND_AUTO_CLOSE},
 	{ "no-tones",    0, 0, OPT_NO_TONES},
 	{ "jb-max-size", 1, 0, OPT_JB_MAX_SIZE},
-#if defined(PJ_HAS_IPV6) && PJ_HAS_IPV6
-	{ "ipv6",	 0, 0, OPT_IPV6},
-#endif
 	{ NULL, 0, 0, 0}
     };
     pj_status_t status;
@@ -745,11 +733,6 @@ static pj_status_t parse_args(int argc, char *argv[],
 	case OPT_IP_ADDR: /* ip-addr */
 	    cfg->udp_cfg.public_addr = pj_str(pj_optarg);
 	    cfg->rtp_cfg.public_addr = pj_str(pj_optarg);
-	    break;
-
-	case OPT_BOUND_ADDR: /* bound-addr */
-	    cfg->udp_cfg.bound_addr = pj_str(pj_optarg);
-	    cfg->rtp_cfg.bound_addr = pj_str(pj_optarg);
 	    break;
 
 	case OPT_NO_UDP: /* no-udp */
@@ -994,16 +977,12 @@ static pj_status_t parse_args(int argc, char *argv[],
 	    cfg->media_cfg.enable_ice = PJ_TRUE;
 	    break;
 
-	case OPT_ICE_REGULAR:
-	    cfg->media_cfg.ice_opt.aggressive = PJ_FALSE;
-	    break;
-
 	case OPT_USE_TURN:
 	    cfg->media_cfg.enable_turn = PJ_TRUE;
 	    break;
 
-	case OPT_ICE_MAX_HOSTS:
-	    cfg->media_cfg.ice_max_host_cands = my_atoi(pj_optarg);
+	case OPT_ICE_NO_HOST:
+	    cfg->media_cfg.ice_no_host_cands = PJ_TRUE;
 	    break;
 
 	case OPT_ICE_NO_RTCP:
@@ -1278,12 +1257,6 @@ static pj_status_t parse_args(int argc, char *argv[],
 	    cfg->media_cfg.jb_max = atoi(pj_optarg);
 	    break;
 
-#if defined(PJ_HAS_IPV6) && PJ_HAS_IPV6
-	case OPT_IPV6:
-	    cfg->ipv6 = PJ_TRUE;
-	    break;
-#endif
-
 	default:
 	    PJ_LOG(1,(THIS_FILE, 
 		      "Argument \"%s\" is not valid. Use --help to see help",
@@ -1531,10 +1504,6 @@ static int write_settings(const struct app_config *config,
 	pj_strcat2(&cfg, line);
     }
 
-    /* Transport options */
-    if (config->ipv6) {
-	pj_strcat2(&cfg, "--ipv6\n");
-    }
 
     /* UDP Transport. */
     pj_ansi_sprintf(line, "--local-port %d\n", config->udp_cfg.port);
@@ -1545,14 +1514,6 @@ static int write_settings(const struct app_config *config,
 	pj_ansi_sprintf(line, "--ip-addr %.*s\n", 
 			(int)config->udp_cfg.public_addr.slen,
 			config->udp_cfg.public_addr.ptr);
-	pj_strcat2(&cfg, line);
-    }
-
-    /* Bound IP address, if any. */
-    if (config->udp_cfg.bound_addr.slen) {
-	pj_ansi_sprintf(line, "--bound-addr %.*s\n", 
-			(int)config->udp_cfg.bound_addr.slen,
-			config->udp_cfg.bound_addr.ptr);
 	pj_strcat2(&cfg, line);
     }
 
@@ -1650,17 +1611,11 @@ static int write_settings(const struct app_config *config,
     if (config->media_cfg.enable_ice)
 	pj_strcat2(&cfg, "--use-ice\n");
 
-    if (config->media_cfg.ice_opt.aggressive == PJ_FALSE)
-	pj_strcat2(&cfg, "--ice-regular\n");
-
     if (config->media_cfg.enable_turn)
 	pj_strcat2(&cfg, "--use-turn\n");
 
-    if (config->media_cfg.ice_max_host_cands >= 0) {
-	pj_ansi_sprintf(line, "--ice_max_host_cands %d\n",
-			config->media_cfg.ice_max_host_cands);
-	pj_strcat2(&cfg, line);
-    }
+    if (config->media_cfg.ice_no_host_cands)
+	pj_strcat2(&cfg, "--ice-no-host\n");
 
     if (config->media_cfg.ice_no_rtcp)
 	pj_strcat2(&cfg, "--ice-no-rtcp\n");
@@ -1897,7 +1852,7 @@ static int write_settings(const struct app_config *config,
 	pj_strcat2(&cfg, "--use-compact-form\n");
     }
 
-    if (!config->cfg.force_lr) {
+    if (config->cfg.force_lr) {
 	pj_strcat2(&cfg, "--no-force-lr\n");
     }
 
@@ -2533,12 +2488,11 @@ static void on_buddy_state(pjsua_buddy_id buddy_id)
     pjsua_buddy_info info;
     pjsua_buddy_get_info(buddy_id, &info);
 
-    PJ_LOG(3,(THIS_FILE, "%.*s status is %.*s (subscription state is %s)",
+    PJ_LOG(3,(THIS_FILE, "%.*s status is %.*s",
 	      (int)info.uri.slen,
 	      info.uri.ptr,
 	      (int)info.status_text.slen,
-	      info.status_text.ptr,
-	      info.sub_state_name));
+	      info.status_text.ptr));
 }
 
 
@@ -3700,9 +3654,7 @@ void console_app_main(const pj_str_t *uri_to_call)
 		    pj_list_push_back(&msg_data.hdr_list, &refer_sub);
 		}
 
-		pjsua_call_xfer_replaces(call, dst_call, 
-					 PJSUA_XFER_NO_REQUIRE_REPLACES, 
-					 &msg_data);
+		pjsua_call_xfer_replaces(call, dst_call, 0, &msg_data);
 	    }
 	    break;
 
@@ -4227,12 +4179,6 @@ pj_status_t app_init(int argc, char *argv[])
     app_config.cfg.cb.on_call_replaced = &on_call_replaced;
     app_config.cfg.cb.on_nat_detect = &on_nat_detect;
 
-    /* Set sound device latency */
-    if (app_config.capture_lat > 0)
-	app_config.media_cfg.snd_rec_latency = app_config.capture_lat;
-    if (app_config.playback_lat)
-	app_config.media_cfg.snd_play_latency = app_config.playback_lat;
-
     /* Initialize pjsua */
     status = pjsua_init(&app_config.cfg, &app_config.log_cfg,
 			&app_config.media_cfg);
@@ -4396,12 +4342,8 @@ pj_status_t app_init(int argc, char *argv[])
     /* Add UDP transport unless it's disabled. */
     if (!app_config.no_udp) {
 	pjsua_acc_id aid;
-	pjsip_transport_type_e type = PJSIP_TRANSPORT_UDP;
 
-	if (app_config.ipv6)
-	    type = PJSIP_TRANSPORT_UDP6;
-
-	status = pjsua_transport_create(type,
+	status = pjsua_transport_create(PJSIP_TRANSPORT_UDP,
 					&app_config.udp_cfg, 
 					&transport_id);
 	if (status != PJ_SUCCESS)
@@ -4497,13 +4439,13 @@ pj_status_t app_init(int argc, char *argv[])
     status = transport_adapter_sample();
 
 #else
-    if (app_config.ipv6)
-	status = create_ipv6_media_transports();
-    else
-	status = pjsua_media_transports_create(&app_config.rtp_cfg);
+    status = pjsua_media_transports_create(&app_config.rtp_cfg);
 #endif
     if (status != PJ_SUCCESS)
 	goto on_error;
+
+    /* Set sound device latency */
+    pjmedia_snd_set_latency(app_config.capture_lat, app_config.playback_lat);
 
     /* Use null sound device? */
 #ifndef STEREO_DEMO
@@ -4724,89 +4666,3 @@ static pj_status_t transport_adapter_sample(void)
 }
 #endif
 
-static pj_status_t create_ipv6_media_transports(void)
-{
-    pjsua_media_transport tp[PJSUA_MAX_CALLS];
-    pj_status_t status;
-    int port = app_config.rtp_cfg.port;
-    unsigned i;
-
-    for (i=0; i<app_config.cfg.max_calls; ++i) {
-	enum { MAX_RETRY = 10 };
-	pj_sock_t sock[2];
-	pjmedia_sock_info si;
-	unsigned j;
-
-	/* Get rid of uninitialized var compiler warning with MSVC */
-	status = PJ_SUCCESS;
-
-	for (j=0; j<MAX_RETRY; ++j) {
-	    unsigned k;
-
-	    for (k=0; k<2; ++k) {
-		pj_sockaddr bound_addr;
-
-		status = pj_sock_socket(pj_AF_INET6(), pj_SOCK_DGRAM(), 0, &sock[k]);
-		if (status != PJ_SUCCESS)
-		    break;
-
-		status = pj_sockaddr_init(pj_AF_INET6(), &bound_addr,
-					  &app_config.rtp_cfg.bound_addr, 
-					  (unsigned short)(port+k));
-		if (status != PJ_SUCCESS)
-		    break;
-
-		status = pj_sock_bind(sock[k], &bound_addr, 
-				      pj_sockaddr_get_len(&bound_addr));
-		if (status != PJ_SUCCESS)
-		    break;
-	    }
-	    if (status != PJ_SUCCESS) {
-		if (k==1)
-		    pj_sock_close(sock[0]);
-
-		if (port != 0)
-		    port += 10;
-		else
-		    break;
-
-		continue;
-	    }
-
-	    pj_bzero(&si, sizeof(si));
-	    si.rtp_sock = sock[0];
-	    si.rtcp_sock = sock[1];
-	
-	    pj_sockaddr_init(pj_AF_INET6(), &si.rtp_addr_name, 
-			     &app_config.rtp_cfg.public_addr, 
-			     (unsigned short)(port));
-	    pj_sockaddr_init(pj_AF_INET6(), &si.rtcp_addr_name, 
-			     &app_config.rtp_cfg.public_addr, 
-			     (unsigned short)(port+1));
-
-	    status = pjmedia_transport_udp_attach(pjsua_get_pjmedia_endpt(),
-						  NULL,
-						  &si,
-						  0,
-						  &tp[i].transport);
-	    if (port != 0)
-		port += 10;
-	    else
-		break;
-
-	    if (status == PJ_SUCCESS)
-		break;
-	}
-
-	if (status != PJ_SUCCESS) {
-	    pjsua_perror(THIS_FILE, "Error creating IPv6 UDP media transport", 
-			 status);
-	    for (j=0; j<i; ++j) {
-		pjmedia_transport_close(tp[j].transport);
-	    }
-	    return status;
-	}
-    }
-
-    return pjsua_media_transports_attach(tp, i, PJ_TRUE);
-}

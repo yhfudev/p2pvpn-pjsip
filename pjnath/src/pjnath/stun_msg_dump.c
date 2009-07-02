@@ -57,19 +57,11 @@ static int print_attr(char *buffer, unsigned length,
 		      const pj_stun_attr_hdr *ahdr)
 {
     char *p = buffer, *end = buffer + length;
-    const char *attr_name = pj_stun_get_attr_name(ahdr->type);
-    char attr_buf[32];
     int len;
-
-    if (*attr_name == '?') {
-	pj_ansi_snprintf(attr_buf, sizeof(attr_buf), "Attr 0x%x", 
-			 ahdr->type);
-	attr_name = attr_buf;
-    }
 
     len = pj_ansi_snprintf(p, end-p,
 			   "  %s: length=%d",
-			   attr_name,
+			   pj_stun_get_attr_name(ahdr->type),
 			   (int)ahdr->length);
     APPLY();
 
@@ -80,8 +72,8 @@ static int print_attr(char *buffer, unsigned length,
     case PJ_STUN_ATTR_SOURCE_ADDR:
     case PJ_STUN_ATTR_CHANGED_ADDR:
     case PJ_STUN_ATTR_REFLECTED_FROM:
-    case PJ_STUN_ATTR_XOR_PEER_ADDR:
-    case PJ_STUN_ATTR_XOR_RELAYED_ADDR:
+    case PJ_STUN_ATTR_PEER_ADDR:
+    case PJ_STUN_ATTR_RELAYED_ADDR:
     case PJ_STUN_ATTR_XOR_MAPPED_ADDR:
     case PJ_STUN_ATTR_XOR_REFLECTED_FROM:
     case PJ_STUN_ATTR_ALTERNATE_SERVER:
@@ -124,7 +116,7 @@ static int print_attr(char *buffer, unsigned length,
     case PJ_STUN_ATTR_LIFETIME:
     case PJ_STUN_ATTR_BANDWIDTH:
     case PJ_STUN_ATTR_REQ_ADDR_TYPE:
-    case PJ_STUN_ATTR_EVEN_PORT:
+    case PJ_STUN_ATTR_REQ_PROPS:
     case PJ_STUN_ATTR_REQ_TRANSPORT:
     case PJ_STUN_ATTR_TIMER_VAL:
     case PJ_STUN_ATTR_PRIORITY:
@@ -231,7 +223,6 @@ static int print_attr(char *buffer, unsigned length,
 	}
 	break;
     case PJ_STUN_ATTR_USE_CANDIDATE:
-    case PJ_STUN_ATTR_DONT_FRAGMENT:
     default:
 	len = pj_ansi_snprintf(p, end-p, "\n");
 	APPLY();

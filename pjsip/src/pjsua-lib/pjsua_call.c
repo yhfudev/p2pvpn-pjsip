@@ -355,13 +355,9 @@ PJ_DEF(pj_status_t) pjsua_call_make_call( pjsua_acc_id acc_id,
 
     PJSUA_LOCK();
 
-    /* Create sound port if none is instantiated, to check if sound device
-     * can be used. But only do this with the conference bridge, as with 
-     * audio switchboard (i.e. APS-Direct), we can only open the sound 
-     * device once the correct format has been known
-     */
-    if (!pjsua_var.is_mswitch && pjsua_var.snd_port==NULL && 
-	pjsua_var.null_snd==NULL && !pjsua_var.no_snd) 
+    /* Create sound port if none is instantiated */
+    if (pjsua_var.snd_port==NULL && pjsua_var.null_snd==NULL && 
+	!pjsua_var.no_snd) 
     {
 	pj_status_t status;
 
@@ -2694,7 +2690,7 @@ void print_call(const char *title,
     /* Dump invite sesion info. */
 
     len = pjsip_hdr_print_on(dlg->remote.info, userinfo, sizeof(userinfo));
-    if (len < 0)
+    if (len < 1)
 	pj_ansi_strcpy(userinfo, "<--uri too long-->");
     else
 	userinfo[len] = '\0';
@@ -2901,16 +2897,9 @@ static void pjsua_call_on_state_changed(pjsip_inv_session *inv,
 	case PJSIP_INV_STATE_EARLY:
 	case PJSIP_INV_STATE_CONNECTING:
 	    st_code = e->body.tsx_state.tsx->status_code;
-	    if (call->inv->state == PJSIP_INV_STATE_CONNECTING)
-		ev_state = PJSIP_EVSUB_STATE_TERMINATED;
-	    else
-		ev_state = PJSIP_EVSUB_STATE_ACTIVE;
+	    ev_state = PJSIP_EVSUB_STATE_ACTIVE;
 	    break;
 
-#if 0
-/* We don't need this, as we've terminated the subscription in
- * CONNECTING state.
- */
 	case PJSIP_INV_STATE_CONFIRMED:
 	    /* When state is confirmed, send the final 200/OK and terminate
 	     * subscription.
@@ -2918,7 +2907,6 @@ static void pjsua_call_on_state_changed(pjsip_inv_session *inv,
 	    st_code = e->body.tsx_state.tsx->status_code;
 	    ev_state = PJSIP_EVSUB_STATE_TERMINATED;
 	    break;
-#endif
 
 	case PJSIP_INV_STATE_DISCONNECTED:
 	    st_code = e->body.tsx_state.tsx->status_code;
@@ -3467,18 +3455,6 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	if (!cont) {
 	    pjsip_evsub_set_mod_data(sub, pjsua_var.mod.id, NULL);
 	}
-
-	/* If the call transfer has completed but the subscription is
-	 * not terminated, terminate it now.
-	 */
-	if (status_line.code/100 == 2 && !is_last) {
-	    pjsip_tx_data *tdata;
-
-	    status = pjsip_evsub_initiate(sub, &pjsip_subscribe_method, 
-					  0, &tdata);
-	    if (status == PJ_SUCCESS)
-		status = pjsip_evsub_send_request(sub, tdata);
-	}
     }
 }
 
@@ -3753,16 +3729,6 @@ static void pjsua_call_on_tsx_state_changed(pjsip_inv_session *inv,
     call = (pjsua_call*) inv->dlg->mod_data[pjsua_var.mod.id];
 
     if (call == NULL) {
-	PJSUA_UNLOCK();
-	return;
-    }
-
-    if (call->inv == NULL) {
-	/* Shouldn't happen. It happens only when we don't terminate the
-	 * server subscription caused by REFER after the call has been
-	 * transfered (and this call has been disconnected), and we
-	 * receive another REFER for this call.
-	 */
 	PJSUA_UNLOCK();
 	return;
     }

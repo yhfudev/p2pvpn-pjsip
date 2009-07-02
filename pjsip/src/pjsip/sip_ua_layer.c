@@ -907,7 +907,7 @@ static void print_dialog( const char *title,
     char userinfo[128];
 
     len = pjsip_hdr_print_on(dlg->remote.info, userinfo, sizeof(userinfo));
-    if (len < 0)
+    if (len < 1)
 	pj_ansi_strcpy(userinfo, "<--uri too long-->");
     else
 	userinfo[len] = '\0';

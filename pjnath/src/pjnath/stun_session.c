@@ -217,18 +217,8 @@ static pj_status_t apply_msg_options(pj_stun_session *sess,
     pj_status_t status = 0;
     pj_str_t realm, username, nonce, auth_key;
 
-    /* If the agent is sending a request, it SHOULD add a SOFTWARE attribute
-     * to the request. The server SHOULD include a SOFTWARE attribute in all 
-     * responses.
-     *
-     * If magic value is not PJ_STUN_MAGIC, only apply the attribute for
-     * responses.
-     */
-    if (sess->srv_name.slen && 
-	pj_stun_msg_find_attr(msg, PJ_STUN_ATTR_SOFTWARE, 0)==NULL &&
-	(PJ_STUN_IS_RESPONSE(msg->hdr.type) ||
-	 PJ_STUN_IS_REQUEST(msg->hdr.type) && msg->hdr.magic==PJ_STUN_MAGIC)) 
-    {
+    /* The server SHOULD include a SOFTWARE attribute in all responses */
+    if (sess->srv_name.slen && PJ_STUN_IS_RESPONSE(msg->hdr.type)) {
 	pj_stun_msg_add_string_attr(pool, msg, PJ_STUN_ATTR_SOFTWARE,
 				    &sess->srv_name);
     }
@@ -302,10 +292,8 @@ static pj_status_t handle_auth_challenge(pj_stun_session *sess,
     if (sess->auth_type != PJ_STUN_AUTH_LONG_TERM)
 	return PJ_SUCCESS;
     
-    if (!PJ_STUN_IS_ERROR_RESPONSE(response->hdr.type)) {
-	sess->auth_retry = 0;
+    if (!PJ_STUN_IS_ERROR_RESPONSE(response->hdr.type))
 	return PJ_SUCCESS;
-    }
 
     ea = (const pj_stun_errcode_attr*)
 	 pj_stun_msg_find_attr(response, PJ_STUN_ATTR_ERROR_CODE, 0);
@@ -498,7 +486,7 @@ PJ_DEF(pj_status_t) pj_stun_session_create( pj_stun_config *cfg,
     
     sess->srv_name.ptr = (char*) pj_pool_alloc(pool, 32);
     sess->srv_name.slen = pj_ansi_snprintf(sess->srv_name.ptr, 32,
-					   "pjnath-%s", pj_get_version());
+					   "pj_stun-%s", pj_get_version());
 
     sess->rx_pool = pj_pool_create(sess->cfg->pf, name, 
 				   PJNATH_POOL_LEN_STUN_TDATA, 
@@ -602,12 +590,12 @@ PJ_DEF(pj_status_t) pj_stun_session_set_lock( pj_stun_session *sess,
     return PJ_SUCCESS;
 }
 
-PJ_DEF(pj_status_t) pj_stun_session_set_software_name(pj_stun_session *sess,
-						      const pj_str_t *sw)
+PJ_DEF(pj_status_t) pj_stun_session_set_server_name(pj_stun_session *sess,
+						    const pj_str_t *srv_name)
 {
     PJ_ASSERT_RETURN(sess, PJ_EINVAL);
-    if (sw && sw->slen)
-	pj_strdup(sess->pool, &sess->srv_name, sw);
+    if (srv_name)
+	pj_strdup(sess->pool, &sess->srv_name, srv_name);
     else
 	sess->srv_name.slen = 0;
     return PJ_SUCCESS;
@@ -635,18 +623,6 @@ PJ_DEF(void) pj_stun_session_set_log( pj_stun_session *sess,
 {
     PJ_ASSERT_ON_FAIL(sess, return);
     sess->log_flag = flags;
-}
-
-PJ_DEF(pj_bool_t) pj_stun_session_use_fingerprint(pj_stun_session *sess,
-						  pj_bool_t use)
-{
-    pj_bool_t old_use;
-
-    PJ_ASSERT_RETURN(sess, PJ_FALSE);
-
-    old_use = sess->use_fingerprint;
-    sess->use_fingerprint = use;
-    return old_use;
 }
 
 static pj_status_t get_auth(pj_stun_session *sess,

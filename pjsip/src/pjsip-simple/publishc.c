@@ -37,7 +37,7 @@
 
 
 #define REFRESH_TIMER		1
-#define DELAY_BEFORE_REFRESH	PJSIP_PUBLISHC_DELAY_BEFORE_REFRESH
+#define DELAY_BEFORE_REFRESH	5
 #define THIS_FILE		"publishc.c"
 
 
@@ -81,7 +81,6 @@ struct pjsip_publishc
     pjsip_expires_hdr		*expires_hdr;
     pj_uint32_t			 expires;
     pjsip_route_hdr		 route_set;
-    pjsip_hdr			 usr_hdr;
 
     /* Authorization sessions. */
     pjsip_auth_clt_sess		 auth_sess;
@@ -158,7 +157,6 @@ PJ_DEF(pj_status_t) pjsip_publishc_create( pjsip_endpoint *endpt,
 	return status;
 
     pj_list_init(&pubc->route_set);
-    pj_list_init(&pubc->usr_hdr);
 
     /* Done */
     *p_pubc = pubc;
@@ -188,9 +186,7 @@ PJ_DEF(pj_pool_t*) pjsip_publishc_get_pool(pjsip_publishc *pubc)
 
 static void set_expires( pjsip_publishc *pubc, pj_uint32_t expires)
 {
-    if (expires != pubc->expires && 
-	expires != PJSIP_PUBC_EXPIRATION_NOT_SPECIFIED) 
-    {
+    if (expires != pubc->expires) {
 	pubc->expires_hdr = pjsip_expires_hdr_create(pubc->pool, expires);
     } else {
 	pubc->expires_hdr = NULL;
@@ -285,23 +281,6 @@ PJ_DEF(pj_status_t) pjsip_publishc_set_route_set( pjsip_publishc *pubc,
     return PJ_SUCCESS;
 }
 
-PJ_DEF(pj_status_t) pjsip_publishc_set_headers( pjsip_publishc *pubc,
-						const pjsip_hdr *hdr_list)
-{
-    const pjsip_hdr *h;
-
-    PJ_ASSERT_RETURN(pubc && hdr_list, PJ_EINVAL);
-
-    pj_list_init(&pubc->usr_hdr);
-    h = hdr_list->next;
-    while (h != hdr_list) {
-	pj_list_push_back(&pubc->usr_hdr, pjsip_hdr_clone(pubc->pool, h));
-	h = h->next;
-    }
-
-    return PJ_SUCCESS;
-}
-
 static pj_status_t create_request(pjsip_publishc *pubc, 
 				  pjsip_tx_data **p_tdata)
 {
@@ -364,19 +343,6 @@ static pj_status_t create_request(pjsip_publishc *pubc,
 					      &pubc->etag);
 	if (hdr)
 	    pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*)hdr);
-    }
-
-    /* Add user headers */
-    if (!pj_list_empty(&pubc->usr_hdr)) {
-	const pjsip_hdr *hdr;
-
-	hdr = pubc->usr_hdr.next;
-	while (hdr != &pubc->usr_hdr) {
-	    pjsip_hdr *new_hdr = (pjsip_hdr*)
-	    			 pjsip_hdr_shallow_clone(tdata->pool, hdr);
-	    pjsip_msg_add_hdr(tdata->msg, new_hdr);
-	    hdr = hdr->next;
-	}
     }
 
 
@@ -564,7 +530,7 @@ static void tsx_callback(void *token, pjsip_event *event)
 	    expires = (pjsip_expires_hdr*)
 	    	      pjsip_msg_find_hdr(msg, PJSIP_H_EXPIRES, NULL);
 
-	    if (pubc->auto_refresh && expires)
+	    if (expires)
 		expiration = expires->ivalue;
 	    
 	    if (pubc->auto_refresh && expiration!=0 && expiration!=0xFFFF) {

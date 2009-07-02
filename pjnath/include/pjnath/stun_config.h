@@ -38,7 +38,7 @@ PJ_BEGIN_DECL
 /**
  * @defgroup PJNATH_STUN_CONFIG STUN Config
  * @brief STUN config
- * @ingroup PJNATH_STUN_BASE
+ * @ingroup PJNATH_STUN
  * @{
  */
 

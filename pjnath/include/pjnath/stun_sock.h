@@ -34,24 +34,16 @@ PJ_BEGIN_DECL
 
 
 /**
- * @addtogroup PJNATH_STUN_SOCK
+ * @defgroup PJNATH_STUN_SOCK STUN aware socket transport
+ * @brief STUN aware socket transport
+ * @ingroup PJNATH_STUN
  * @{
  *
  * The STUN transport provides asynchronous UDP like socket transport
- * with the additional STUN capability. It has the following features:
- *
- *  - API to send and receive UDP packets
- *
- *  - multiplex STUN and non-STUN incoming packets and distinguish between
- *    STUN responses that belong to internal requests with application data
- *    (the application data may be STUN packets as well)
- *
- *  - DNS SRV resolution to the STUN server (if wanted), along with fallback
- *    to DNS A resolution if SRV record is not found.
- *
- *  - STUN keep-alive maintenance, and handle changes to the mapped address
- *    (when the NAT binding changes)
- *
+ * with the additional capability to query the publicly mapped transport
+ * address (using STUN resolution), to refresh the NAT binding, and to
+ * demultiplex internal STUN messages from application data (the 
+ * application data may be a STUN message as well).
  */
 
 /**
@@ -283,7 +275,7 @@ PJ_DECL(void) pj_stun_sock_cfg_default(pj_stun_sock_cfg *cfg);
  *			this transport.
  * @param p_sock	Pointer to receive the created transport instance.
  *
- * @return		PJ_SUCCESS if the operation has been successful,
+ * @restun		PJ_SUCCESS if the operation has been successful,
  *			or the appropriate error code on failure.
  */
 PJ_DECL(pj_status_t) pj_stun_sock_create(pj_stun_config *stun_cfg,
@@ -335,7 +327,7 @@ PJ_DECL(pj_status_t) pj_stun_sock_start(pj_stun_sock *stun_sock,
  *
  * @param sock		The STUN transport socket.
  *
- * @return		PJ_SUCCESS if the operation has been successful,
+ * @restun		PJ_SUCCESS if the operation has been successful,
  *			or the appropriate error code on failure.
  */
 PJ_DECL(pj_status_t) pj_stun_sock_destroy(pj_stun_sock *sock);
@@ -348,7 +340,7 @@ PJ_DECL(pj_status_t) pj_stun_sock_destroy(pj_stun_sock *sock);
  * @param stun_sock	The STUN transport instance.
  * @param user_data	Arbitrary data.
  *
- * @return		PJ_SUCCESS if the operation has been successful,
+ * @restun		PJ_SUCCESS if the operation has been successful,
  *			or the appropriate error code on failure.
  */
 PJ_DECL(pj_status_t) pj_stun_sock_set_user_data(pj_stun_sock *stun_sock,
@@ -360,7 +352,7 @@ PJ_DECL(pj_status_t) pj_stun_sock_set_user_data(pj_stun_sock *stun_sock,
  *
  * @param stun_sock	The STUN transport instance.
  *
- * @return		The user/application data.
+ * @restun		The user/application data.
  */
 PJ_DECL(void*) pj_stun_sock_get_user_data(pj_stun_sock *stun_sock);
 
@@ -372,7 +364,7 @@ PJ_DECL(void*) pj_stun_sock_get_user_data(pj_stun_sock *stun_sock);
  * @param stun_sock	The STUN transport instance.
  * @param info		Pointer to be filled with STUN transport info.
  *
- * @return		PJ_SUCCESS if the operation has been successful,
+ * @restun		PJ_SUCCESS if the operation has been successful,
  *			or the appropriate error code on failure.
  */
 PJ_DECL(pj_status_t) pj_stun_sock_get_info(pj_stun_sock *stun_sock,
@@ -384,7 +376,7 @@ PJ_DECL(pj_status_t) pj_stun_sock_get_info(pj_stun_sock *stun_sock,
  * asynchronously and in this case \a on_data_sent() will be called.
  *
  * @param stun_sock	The STUN transport instance.
- * @param send_key	Optional send key for sending the packet down to
+ * @param op_key	Optional send key for sending the packet down to
  *			the ioqueue. This value will be given back to
  *			\a on_data_sent() callback
  * @param pkt		The data/packet to be sent to peer.

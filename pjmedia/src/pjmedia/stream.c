@@ -168,11 +168,6 @@ struct pjmedia_stream
     unsigned		     rtcp_xr_dest_len; /**< Length of RTCP XR dest
 					            address		    */
 #endif
-
-#if defined(PJMEDIA_STREAM_ENABLE_KA) && PJMEDIA_STREAM_ENABLE_KA!=0
-    pj_timestamp	     last_frm_ts_sent; /**< Timestamp of last sending
-					            packet		    */
-#endif
 };
 
 
@@ -197,52 +192,6 @@ static void stream_perror(const char *sender, const char *title,
     PJ_LOG(4,(sender, "%s: %s [err:%d]", title, errmsg, status));
 }
 
-/*
- * Send keep-alive packet.
- */
-static void send_keep_alive_packet(pjmedia_stream *stream)
-{
-#if defined(PJMEDIA_STREAM_ENABLE_KA) && \
-    PJMEDIA_STREAM_ENABLE_KA == PJMEDIA_STREAM_KA_EMPTY_RTP
-
-    /* Keep-alive packet is empty RTP */
-    pj_status_t status;
-    void *rtphdr;
-    int pkt_len;
-
-
-    status = pjmedia_rtp_encode_rtp( &stream->enc->rtp,
-				     stream->enc->pt, 0,
-				     1,
-				     0,
-				     (const void**)&rtphdr,
-				     &pkt_len);
-    pj_assert(status == PJ_SUCCESS);
-
-    pj_memcpy(stream->enc->out_pkt, rtphdr, pkt_len);
-    pjmedia_transport_send_rtp(stream->transport, stream->enc->out_pkt,
-			       pkt_len);
-    TRC_((stream->port.info.name.ptr, "Keep-alive sent (empty RTP)"));
-
-#elif defined(PJMEDIA_STREAM_ENABLE_KA) && \
-      PJMEDIA_STREAM_ENABLE_KA == PJMEDIA_STREAM_KA_USER
-
-    /* Keep-alive packet is defined in PJMEDIA_STREAM_KA_USER_PKT */
-    int pkt_len;
-    const pj_str_t str_ka = PJMEDIA_STREAM_KA_USER_PKT;
-
-    pj_memcpy(stream->enc->out_pkt, str_ka.ptr, str_ka.slen);
-    pkt_len = str_ka.slen;
-    pjmedia_transport_send_rtp(stream->transport, stream->enc->out_pkt,
-			       pkt_len);
-    TRC_((stream->port.info.name.ptr, "Keep-alive sent"));
-
-#else
-    
-    PJ_UNUSED_ARG(stream);
-
-#endif
-}
 
 /*
  * play_callback()
@@ -453,116 +402,6 @@ static pj_status_t get_frame( pjmedia_port *port, pjmedia_frame *frame)
 	frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
 	frame->size = samples_count * BYTES_PER_SAMPLE;
 	frame->timestamp.u64 = 0;
-    }
-
-    return PJ_SUCCESS;
-}
-
-
-/* The other version of get_frame callback used when stream port format
- * is non linear PCM.
- */
-static pj_status_t get_frame_ext( pjmedia_port *port, pjmedia_frame *frame)
-{
-    pjmedia_stream *stream = (pjmedia_stream*) port->port_data.pdata;
-    pjmedia_channel *channel = stream->dec;
-    pjmedia_frame_ext *f = (pjmedia_frame_ext*)frame;
-    unsigned samples_per_frame, samples_required;
-    pj_status_t status;
-
-    /* Return no frame if channel is paused */
-    if (channel->paused) {
-	frame->type = PJMEDIA_FRAME_TYPE_NONE;
-	return PJ_SUCCESS;
-    }
-
-    /* Repeat get frame from the jitter buffer and decode the frame
-     * until we have enough frames according to codec's ptime.
-     */
-
-    samples_required = stream->port.info.samples_per_frame;
-    samples_per_frame = stream->codec_param.info.frm_ptime *
-			stream->codec_param.info.clock_rate *
-			stream->codec_param.info.channel_cnt / 
-			1000;
-
-    pj_bzero(f, sizeof(pjmedia_frame_ext));
-    f->base.type = PJMEDIA_FRAME_TYPE_EXTENDED;
-
-    while (f->samples_cnt < samples_required) {
-	char frame_type;
-	pj_size_t frame_size;
-	pj_uint32_t bit_info;
-
-	/* Lock jitter buffer mutex first */
-	pj_mutex_lock( stream->jb_mutex );
-
-	/* Get frame from jitter buffer. */
-	pjmedia_jbuf_get_frame2(stream->jb, channel->out_pkt, &frame_size,
-			        &frame_type, &bit_info);
-	
-	/* Unlock jitter buffer mutex. */
-	pj_mutex_unlock( stream->jb_mutex );
-
-	if (frame_type == PJMEDIA_JB_NORMAL_FRAME) {
-	    /* Got "NORMAL" frame from jitter buffer */
-	    pjmedia_frame frame_in;
-
-	    /* Decode */
-	    frame_in.buf = channel->out_pkt;
-	    frame_in.size = frame_size;
-	    frame_in.bit_info = bit_info;
-	    frame_in.type = PJMEDIA_FRAME_TYPE_AUDIO;
-
-	    status = stream->codec->op->decode( stream->codec, &frame_in,
-						0, frame);
-	    if (status != PJ_SUCCESS) {
-		LOGERR_((port->info.name.ptr, "codec decode() error", 
-			 status));
-		pjmedia_frame_ext_append_subframe(f, NULL, 0,
-					    (pj_uint16_t)samples_per_frame);
-	    }
-	} else {
-	    status = (*stream->codec->op->recover)(stream->codec,
-						   0, frame);
-	    if (status != PJ_SUCCESS) {
-		pjmedia_frame_ext_append_subframe(f, NULL, 0,
-					    (pj_uint16_t)samples_per_frame);
-	    }
-
-	    if (frame_type == PJMEDIA_JB_MISSING_FRAME) {
-		PJ_LOG(5,(stream->port.info.name.ptr,  "Frame lost!"));
-	    } else if (frame_type == PJMEDIA_JB_ZERO_EMPTY_FRAME) {
-		/* Jitter buffer is empty. Check if this is the first "empty" 
-		 * state.
-		 */
-		if (frame_type != stream->jb_last_frm) {
-		    pjmedia_jb_state jb_state;
-
-		    /* Report the state of jitter buffer */
-		    pjmedia_jbuf_get_state(stream->jb, &jb_state);
-		    PJ_LOG(5,(stream->port.info.name.ptr, 
-			      "Jitter buffer empty (prefetch=%d)", 
-			      jb_state.prefetch));
-		}
-	    } else {
-		pjmedia_jb_state jb_state;
-
-		/* It can only be PJMEDIA_JB_ZERO_PREFETCH frame */
-		pj_assert(frame_type == PJMEDIA_JB_ZERO_PREFETCH_FRAME);
-
-		/* Get the state of jitter buffer */
-		pjmedia_jbuf_get_state(stream->jb, &jb_state);
-
-		if (stream->jb_last_frm != frame_type) {
-		    PJ_LOG(5,(stream->port.info.name.ptr, 
-			      "Jitter buffer is bufferring (prefetch=%d)",
-			      jb_state.prefetch));
-		}
-	    }
-	}
-
-	stream->jb_last_frm = frame_type;
     }
 
     return PJ_SUCCESS;
@@ -838,25 +677,6 @@ static pj_status_t put_frame_imp( pjmedia_port *port,
     int rtphdrlen;
     int inc_timestamp = 0;
 
-
-#if defined(PJMEDIA_STREAM_ENABLE_KA) && PJMEDIA_STREAM_ENABLE_KA != 0
-    /* If the interval since last sending packet is greater than
-     * PJMEDIA_STREAM_KA_INTERVAL, send keep-alive packet.
-     */
-    {
-	pj_uint32_t dtx_duration;
-
-	dtx_duration = pj_timestamp_diff32(&stream->last_frm_ts_sent, 
-					   &frame->timestamp);
-	if (dtx_duration >
-	    PJMEDIA_STREAM_KA_INTERVAL * stream->port.info.clock_rate)
-	{
-	    send_keep_alive_packet(stream);
-	    stream->last_frm_ts_sent = frame->timestamp;
-	}
-    }
-#endif
-
     /* Don't do anything if stream is paused */
     if (channel->paused) {
 	stream->enc_buf_pos = stream->enc_buf_count = 0;
@@ -866,9 +686,6 @@ static pj_status_t put_frame_imp( pjmedia_port *port,
     /* Number of samples in the frame */
     if (frame->type == PJMEDIA_FRAME_TYPE_AUDIO)
 	ts_len = (frame->size >> 1) / stream->codec_param.info.channel_cnt;
-    else if (frame->type == PJMEDIA_FRAME_TYPE_EXTENDED)
-	ts_len = stream->port.info.samples_per_frame / 
-		 stream->port.info.channel_count;
     else
 	ts_len = 0;
 
@@ -935,7 +752,6 @@ static pj_status_t put_frame_imp( pjmedia_port *port,
      */
     } else if (frame->type == PJMEDIA_FRAME_TYPE_AUDIO &&
 	       frame->buf == NULL &&
-	       stream->port.info.format.id == PJMEDIA_FORMAT_L16 &&
 	       (stream->dir & PJMEDIA_DIR_ENCODING) &&
 	       stream->codec_param.info.frm_ptime *
 	       stream->codec_param.info.channel_cnt *
@@ -1059,11 +875,6 @@ static pj_status_t put_frame_imp( pjmedia_port *port,
     pjmedia_rtcp_tx_rtp(&stream->rtcp, frame_out.size);
     stream->rtcp.stat.rtp_tx_last_ts = pj_ntohl(stream->enc->rtp.out_hdr.ts);
     stream->rtcp.stat.rtp_tx_last_seq = pj_ntohs(stream->enc->rtp.out_hdr.seq);
-
-#if defined(PJMEDIA_STREAM_ENABLE_KA) && PJMEDIA_STREAM_ENABLE_KA!=0
-    /* Update timestamp of last sending packet. */
-    stream->last_frm_ts_sent = frame->timestamp;
-#endif
 
     return PJ_SUCCESS;
 }
@@ -1673,19 +1484,8 @@ PJ_DEF(pj_status_t) pjmedia_stream_create( pjmedia_endpt *endpt,
     stream->port.info.clock_rate = info->fmt.clock_rate;
     stream->port.info.channel_count = info->fmt.channel_cnt;
     stream->port.port_data.pdata = stream;
-    if (info->param==NULL || info->param->info.fmt_id == PJMEDIA_FORMAT_L16) {
-	stream->port.info.format.id = PJMEDIA_FORMAT_L16;
-
-	stream->port.put_frame = &put_frame;
-	stream->port.get_frame = &get_frame;
-    } else {
-	stream->port.info.format.id = info->param->info.fmt_id;
-	stream->port.info.format.bitrate = info->param->info.avg_bps;
-	stream->port.info.format.vad = (info->param->setting.vad != 0);
-
-	stream->port.put_frame = &put_frame;
-	stream->port.get_frame = &get_frame_ext;
-    }
+    stream->port.put_frame = &put_frame;
+    stream->port.get_frame = &get_frame;
 
 
     /* Init stream: */
@@ -1808,7 +1608,7 @@ PJ_DEF(pj_status_t) pjmedia_stream_create( pjmedia_endpt *endpt,
 
     /* Initially disable the VAD in the stream, to help traverse NAT better */
     stream->vad_enabled = stream->codec_param.setting.vad;
-    if (PJMEDIA_STREAM_VAD_SUSPEND_MSEC > 0 && stream->vad_enabled) {
+    if (stream->vad_enabled) {
 	stream->codec_param.setting.vad = 0;
 	stream->ts_vad_disabled = 0;
 	stream->codec->op->modify(stream->codec, &stream->codec_param);
@@ -1860,7 +1660,7 @@ PJ_DEF(pj_status_t) pjmedia_stream_create( pjmedia_endpt *endpt,
 
     /* Init jitter buffer parameters: */
     if (info->jb_max >= stream->codec_param.info.frm_ptime)
-	jb_max = (info->jb_max + stream->codec_param.info.frm_ptime - 1) / 
+	jb_max = (info->jb_max + stream->codec_param.info.frm_ptime - 1) /
 		 stream->codec_param.info.frm_ptime;
     else
 	jb_max = 500 / stream->codec_param.info.frm_ptime;
@@ -1984,11 +1784,6 @@ PJ_DEF(pj_status_t) pjmedia_stream_create( pjmedia_endpt *endpt,
 	pjmedia_transport_send_rtcp(stream->transport, 
 				    stream->enc->out_pkt, len);
     }
-
-#if defined(PJMEDIA_STREAM_ENABLE_KA) && PJMEDIA_STREAM_ENABLE_KA!=0
-    /* NAT hole punching by sending KA packet via RTP transport. */
-    send_keep_alive_packet(stream);
-#endif
 
     /* Success! */
     *p_stream = stream;

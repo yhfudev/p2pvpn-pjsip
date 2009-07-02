@@ -141,7 +141,6 @@
 #   pragma warning(disable:4761) // integral mismatch
 #   pragma warning(disable:4018) // signed/unsigned mismatch
 #   pragma warning(disable:4244) // conversion from int64 to int
-#   pragma warning(disable:4100) // unreferenced formal parameter
 #endif
 
 /* clock()  */

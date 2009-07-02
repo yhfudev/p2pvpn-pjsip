@@ -23,11 +23,10 @@
 
 /**
  * @file sound.h
- * @brief Legacy sound device API
+ * @brief Sound player and recorder device framework.
  */
-#include <pjmedia-audiodev/audiodev.h>
 #include <pjmedia/types.h>
-
+#include <pj/pool.h>
 
 PJ_BEGIN_DECL
 
@@ -36,11 +35,6 @@ PJ_BEGIN_DECL
  * @ingroup PJMED_SND_PORT
  * @brief PJMEDIA abstraction for sound device hardware
  * @{
- *
- * <strong>Warning: this sound device API has been deprecated
- * and replaced by PJMEDIA Audio Device API. Please see
- * http://trac.pjsip.org/repos/wiki/Audio_Dev_API for more
- * information.</strong>
  *
  * This section describes lower level abstraction for sound device
  * hardware. Application normally uses the higher layer @ref
@@ -67,7 +61,7 @@ PJ_BEGIN_DECL
  * frames from/to the sound device.
  */
 
-/** Opaque declaration for pjmedia_snd_stream. */
+/** Opaque data type for audio stream. */
 typedef struct pjmedia_snd_stream pjmedia_snd_stream;
 
 /**
@@ -97,6 +91,7 @@ typedef struct pjmedia_snd_stream_info
     unsigned	rec_latency;	    /**< Record latency, in samples.	    */
     unsigned	play_latency;	    /**< Playback latency, in samples.	    */
 } pjmedia_snd_stream_info;
+
 
 /** 
  * This callback is called by player stream when it needs additional data

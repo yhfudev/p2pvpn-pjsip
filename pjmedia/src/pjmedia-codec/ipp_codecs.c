@@ -26,7 +26,6 @@
 #include <pjmedia/silencedet.h>
 #include <pj/assert.h>
 #include <pj/log.h>
-#include <pj/math.h>
 #include <pj/pool.h>
 #include <pj/string.h>
 #include <pj/os.h>
@@ -201,11 +200,6 @@ static pj_status_t parse_amr( ipp_private_t *codec_data, void *pkt,
 static  pj_status_t pack_amr( ipp_private_t *codec_data, void *pkt, 
 			      pj_size_t *pkt_size, pj_size_t max_pkt_size);
 
-static    void predecode_g7221( ipp_private_t *codec_data,
-				const pjmedia_frame *rtp_frame,
-				USC_Bitstream *usc_frame);
-static  pj_status_t pack_g7221( ipp_private_t *codec_data, void *pkt, 
-			        pj_size_t *pkt_size, pj_size_t max_pkt_size);
 
 /* IPP codec implementation descriptions. */
 static struct ipp_codec {
@@ -234,19 +228,17 @@ static struct ipp_codec {
 ipp_codec[] = 
 {
 #   if PJMEDIA_HAS_INTEL_IPP_CODEC_AMR
-    /* AMR-NB SID seems to produce noise, so let's just disable its VAD. */
     {1, "AMR",	    PJMEDIA_RTP_PT_AMR,       &USC_GSMAMR_Fxns,  8000, 1, 160, 
-		    7400, 12200, 2, 0, 1, 
-		    &predecode_amr, &parse_amr, &pack_amr,
-		    {1, {{{"octet-align", 11}, {"1", 1}}} }
+		    5900, 12200, 4, 1, 1, 
+		    &predecode_amr, &parse_amr, &pack_amr
+		    /*, {1, {{{"octet-align", 11}, {"1", 1}}} } */
     },
 #   endif
 
 #   if PJMEDIA_HAS_INTEL_IPP_CODEC_AMRWB
     {1, "AMR-WB",   PJMEDIA_RTP_PT_AMRWB,     &USC_AMRWB_Fxns,  16000, 1, 320,
 		    15850, 23850, 1, 1, 1, 
-		    &predecode_amr, &parse_amr, &pack_amr,
-		    {1, {{{"octet-align", 11}, {"1", 1}}} }
+		    &predecode_amr, &parse_amr, &pack_amr
     },
 #   endif
 
@@ -301,17 +293,17 @@ ipp_codec[] =
 #   if PJMEDIA_HAS_INTEL_IPP_CODEC_G722_1
     {0, "G7221",    PJMEDIA_RTP_PT_G722_1_16, &USC_G722_Fxns,	16000, 1, 320, 
 		    16000, 16000, 1, 0, 1,
-		    predecode_g7221, NULL, pack_g7221,
+		    NULL, NULL, NULL,
 		    {1, {{{"bitrate", 7}, {"16000", 5}}} }
     },
     {1, "G7221",    PJMEDIA_RTP_PT_G722_1_24, &USC_G722_Fxns,	16000, 1, 320, 
 		    24000, 24000, 1, 0, 1,
-		    predecode_g7221, NULL, pack_g7221,
+		    NULL, NULL, NULL,
 		    {1, {{{"bitrate", 7}, {"24000", 5}}} }
     },
     {1, "G7221",    PJMEDIA_RTP_PT_G722_1_32, &USC_G722_Fxns,	16000, 1, 320, 
 		    32000, 32000, 1, 0, 1,
-		    predecode_g7221, NULL, pack_g7221,
+		    NULL, NULL, NULL,
 		    {1, {{{"bitrate", 7}, {"32000", 5}}} }
     },
 #   endif
@@ -563,19 +555,7 @@ static pj_status_t parse_amr(ipp_private_t *codec_data, void *pkt,
 
     /* Check Change Mode Request. */
     if ((setting->amr_nb && cmr <= 7) || (!setting->amr_nb && cmr <= 8)) {
-	struct ipp_codec *ippc = &ipp_codec[codec_data->codec_idx];
-
 	s->enc_mode = cmr;
-	codec_data->info->params.modes.bitrate = s->enc_setting.amr_nb?
-				pjmedia_codec_amrnb_bitrates[s->enc_mode] :
-				pjmedia_codec_amrwb_bitrates[s->enc_mode];
-	ippc->fxns->std.Control(&codec_data->info->params.modes, 
-				codec_data->enc);
-
-	PJ_LOG(4,(THIS_FILE, "AMR%s switched encoding mode to: %d (%dbps)",
-		  (s->enc_setting.amr_nb?"":"-WB"),
-		  s->enc_mode,
-		  codec_data->info->params.modes.bitrate));
     }
 
     return PJ_SUCCESS;
@@ -583,58 +563,6 @@ static pj_status_t parse_amr(ipp_private_t *codec_data, void *pkt,
 
 #endif /* PJMEDIA_HAS_INTEL_IPP_CODEC_AMR */
 
-
-#if PJMEDIA_HAS_INTEL_IPP_CODEC_G722_1
-
-static void predecode_g7221( ipp_private_t *codec_data,
-			     const pjmedia_frame *rtp_frame,
-			     USC_Bitstream *usc_frame)
-{
-    usc_frame->pBuffer = (char*)rtp_frame->buf;
-    usc_frame->nbytes = rtp_frame->size;
-    usc_frame->frametype = 0;
-    usc_frame->bitrate = codec_data->info->params.modes.bitrate;
-
-#if defined(PJ_IS_LITTLE_ENDIAN) && PJ_IS_LITTLE_ENDIAN!=0
-    {
-	pj_uint16_t *p, *p_end;
-
-	p = (pj_uint16_t*)rtp_frame->buf;
-	p_end = p + rtp_frame->size/2;
-	while (p < p_end) {
-	    *p = pj_ntohs(*p);
-	    ++p;
-	}
-    }
-#endif
-}
-
-static pj_status_t pack_g7221( ipp_private_t *codec_data, void *pkt, 
-			       pj_size_t *pkt_size, pj_size_t max_pkt_size)
-{
-    PJ_UNUSED_ARG(codec_data);
-    PJ_UNUSED_ARG(max_pkt_size);
-
-#if defined(PJ_IS_LITTLE_ENDIAN) && PJ_IS_LITTLE_ENDIAN!=0
-    {
-	pj_uint16_t *p, *p_end;
-
-	p = (pj_uint16_t*)pkt;
-	p_end = p + *pkt_size/2;
-	while (p < p_end) {
-	    *p = pj_htons(*p);
-	    ++p;
-	}
-    }
-#else
-    PJ_UNUSED_ARG(pkt);
-    PJ_UNUSED_ARG(pkt_size);
-#endif
-
-    return PJ_SUCCESS;
-}
-
-#endif /* PJMEDIA_HAS_INTEL_IPP_CODEC_G722_1 */
 
 /*
  * Initialize and register IPP codec factory to pjmedia endpoint.
@@ -1048,7 +976,7 @@ static pj_status_t ipp_codec_open( pjmedia_codec *codec,
     codec_data->info->params.direction = USC_DECODE;
 
     /* Not sure if VAD affects decoder, just try to be safe */
-    //codec_data->info->params.modes.vad = ippc->has_native_vad;
+    codec_data->info->params.modes.vad = ippc->has_native_vad;
 
     /* Get number of memory blocks needed by the decoder */
     if (USC_NoError != ippc->fxns->std.NumAlloc(&codec_data->info->params, 
@@ -1099,102 +1027,34 @@ static pj_status_t ipp_codec_open( pjmedia_codec *codec,
     if (ippc->pt == PJMEDIA_RTP_PT_AMR || ippc->pt == PJMEDIA_RTP_PT_AMRWB) {
 	amr_settings_t *s;
 	pj_uint8_t octet_align = 0;
-	pj_int8_t enc_mode;
+	const pj_str_t STR_FMTP_OCTET_ALIGN = {"octet-align", 11};
 
-	enc_mode = pjmedia_codec_amr_get_mode(
-				codec_data->info->params.modes.bitrate);
-	pj_assert(enc_mode >= 0 && enc_mode <= 8);
-
-	/* Check AMR specific attributes */
-
+	/* Check octet-align */
 	for (i = 0; i < attr->setting.dec_fmtp.cnt; ++i) {
-	    /* octet-align, one of the parameters that must have same value 
-	     * in offer & answer (RFC 4867 Section 8.3.1). Just check fmtp
-	     * in the decoder side, since it's value is guaranteed to fulfil 
-	     * above requirement (by SDP negotiator).
-	     */
-	    const pj_str_t STR_FMTP_OCTET_ALIGN = {"octet-align", 11};
-	    
 	    if (pj_stricmp(&attr->setting.dec_fmtp.param[i].name, 
 			   &STR_FMTP_OCTET_ALIGN) == 0)
 	    {
 		octet_align=(pj_uint8_t)
-			    pj_strtoul(&attr->setting.dec_fmtp.param[i].val);
+			    (pj_strtoul(&attr->setting.dec_fmtp.param[i].val));
 		break;
 	    }
 	}
 
-	for (i = 0; i < attr->setting.enc_fmtp.cnt; ++i) {
-	    /* mode-set, encoding mode is chosen based on local default mode 
-	     * setting:
-	     * - if local default mode is included in the mode-set, use it
-	     * - otherwise, find the closest mode to local default mode;
-	     *   if there are two closest modes, prefer to use the higher
-	     *   one, e.g: local default mode is 4, the mode-set param
-	     *   contains '2,3,5,6', then 5 will be chosen.
-	     */
-	    const pj_str_t STR_FMTP_MODE_SET = {"mode-set", 8};
-	    
-	    if (pj_stricmp(&attr->setting.enc_fmtp.param[i].name, 
-			   &STR_FMTP_MODE_SET) == 0)
-	    {
-		const char *p;
-		pj_size_t l;
-		pj_int8_t diff = 99;
-		
-		p = pj_strbuf(&attr->setting.enc_fmtp.param[i].val);
-		l = pj_strlen(&attr->setting.enc_fmtp.param[i].val);
-
-		while (l--) {
-		    if ((ippc->pt==PJMEDIA_RTP_PT_AMR && *p>='0' && *p<='7') ||
-		        (ippc->pt==PJMEDIA_RTP_PT_AMRWB && *p>='0' && *p<='8'))
-		    {
-			pj_int8_t tmp = *p - '0' - enc_mode;
-
-			if (PJ_ABS(diff) > PJ_ABS(tmp) || 
-			    (PJ_ABS(diff) == PJ_ABS(tmp) && tmp > diff))
-			{
-			    diff = tmp;
-			    if (diff == 0) break;
-			}
-		    }
-		    ++p;
-		}
-
-		if (diff == 99)
-		    goto on_error;
-
-		enc_mode = enc_mode + diff;
-
-		break;
-	    }
-	}
-
-	/* Initialize AMR specific settings */
 	s = PJ_POOL_ZALLOC_T(pool, amr_settings_t);
 	codec_data->codec_setting = s;
+
+	s->enc_mode = pjmedia_codec_amr_get_mode(ippc->def_bitrate);
+	if (s->enc_mode < 0)
+	    goto on_error;
 
 	s->enc_setting.amr_nb = (pj_uint8_t)(ippc->pt == PJMEDIA_RTP_PT_AMR);
 	s->enc_setting.octet_aligned = octet_align;
 	s->enc_setting.reorder = PJ_TRUE;
 	s->enc_setting.cmr = 15;
-
+	
 	s->dec_setting.amr_nb = (pj_uint8_t)(ippc->pt == PJMEDIA_RTP_PT_AMR);
 	s->dec_setting.octet_aligned = octet_align;
 	s->dec_setting.reorder = PJ_TRUE;
-
-	/* Apply encoder mode/bitrate */
-	s->enc_mode = enc_mode;
-	codec_data->info->params.modes.bitrate = s->enc_setting.amr_nb?
-				pjmedia_codec_amrnb_bitrates[s->enc_mode]:
-				pjmedia_codec_amrwb_bitrates[s->enc_mode];
-	ippc->fxns->std.Control(&codec_data->info->params.modes, 
-				codec_data->enc);
-
-	PJ_LOG(4,(THIS_FILE, "AMR%s encoding mode: %d (%dbps)", 
-		  (s->enc_setting.amr_nb?"":"-WB"),
-		  s->enc_mode,
-		  codec_data->info->params.modes.bitrate));
     }
 #endif
 
