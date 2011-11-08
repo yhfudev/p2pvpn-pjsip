@@ -559,9 +559,6 @@ PJ_DEF(pj_status_t) pj_thread_join(pj_thread_t *p)
     PJ_CHECK_STACK();
     PJ_ASSERT_RETURN(p, PJ_EINVAL);
 
-    if (p == pj_thread_this())
-	return PJ_ECANCELLED;
-
     PJ_LOG(6, (pj_thread_this()->obj_name, "Joining thread %s", p->obj_name));
 
     rc = WaitForSingleObject(rec->hthread, INFINITE);
@@ -1424,13 +1421,3 @@ PJ_DEF(pj_color_t) pj_term_get_color(void)
 }
 
 #endif	/* PJ_TERM_HAS_COLOR */
-
-/*
- * pj_run_app()
- */
-PJ_DEF(int) pj_run_app(pj_main_func_ptr main_func, int argc, char *argv[],
-                       unsigned flags)
-{
-    PJ_UNUSED_ARG(flags);
-    return (*main_func)(argc, argv);
-}

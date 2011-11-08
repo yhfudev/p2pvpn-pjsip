@@ -2765,14 +2765,6 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
-				RelativePath="..\src\pjmedia-codec\audio_codecs.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjmedia-codec\ffmpeg_codecs.c"
-				>
-			</File>
-			<File
 				RelativePath="..\src\pjmedia-codec\g722.c"
 				>
 			</File>
@@ -2837,14 +2829,6 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\src\pjmedia-codec\h263_packetizer.c"
-				>
-			</File>
-			<File
-				RelativePath="..\src\pjmedia-codec\h264_packetizer.c"
-				>
 			</File>
 			<File
 				RelativePath="..\src\pjmedia-codec\ilbc.c"
@@ -3062,15 +3046,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\include\pjmedia-codec\audio_codecs.h"
-				>
-			</File>
-			<File
 				RelativePath="..\include\pjmedia-codec\config.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjmedia-codec\ffmpeg_codecs.h"
 				>
 			</File>
 			<File
@@ -3083,14 +3059,6 @@
 			</File>
 			<File
 				RelativePath="..\include\pjmedia-codec\gsm.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjmedia-codec\h263_packetizer.h"
-				>
-			</File>
-			<File
-				RelativePath="..\include\pjmedia-codec\h264_packetizer.h"
 				>
 			</File>
 			<File

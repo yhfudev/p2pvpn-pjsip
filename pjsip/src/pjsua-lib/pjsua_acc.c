@@ -130,8 +130,7 @@ PJ_DEF(void) pjsua_acc_config_dup( pj_pool_t *pool,
 
     pjsip_auth_clt_pref_dup(pool, &dst->auth_pref, &src->auth_pref);
 
-    pjsua_transport_config_dup(pool, &dst->rtp_cfg, &src->rtp_cfg);
-
+    dst->ka_interval = src->ka_interval;
     pj_strdup(pool, &dst->ka_data, &src->ka_data);
 }
 
@@ -374,26 +373,13 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
 {
     pjsua_acc *acc;
     unsigned i, id;
-    pj_status_t status = PJ_SUCCESS;
+    pj_status_t status;
 
-    PJ_ASSERT_RETURN(cfg, PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc_cnt < PJ_ARRAY_SIZE(pjsua_var.acc),
 		     PJ_ETOOMANY);
 
     /* Must have a transport */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[0].data.ptr != NULL, PJ_EINVALIDOP);
-
-    /* Verify media count */
-#if !defined(PJMEDIA_HAS_VIDEO) || (PJMEDIA_HAS_VIDEO == 0)
-    /* Enable PJMEDIA_HAS_VIDEO in your config_site.h! */
-    PJ_ASSERT_RETURN(cfg->max_video_cnt == 0, PJ_EINVAL);
-#endif
-    PJ_ASSERT_RETURN(cfg->max_audio_cnt + cfg->max_video_cnt <= 
-		     PJSUA_MAX_CALL_MEDIA, PJ_ETOOMANY);
-
-    PJ_LOG(4,(THIS_FILE, "Adding account: id=%.*s",
-	      (int)cfg->id.slen, cfg->id.ptr));
-    pj_log_push_indent();
 
     PJSUA_LOCK();
 
@@ -439,11 +425,8 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
     /* Check the route URI's and force loose route if required */
     for (i=0; i<acc->cfg.proxy_cnt; ++i) {
 	status = normalize_route_uri(acc->pool, &acc->cfg.proxy[i]);
-	if (status != PJ_SUCCESS) {
-	    PJSUA_UNLOCK();
-	    pj_log_pop_indent();
+	if (status != PJ_SUCCESS)
 	    return status;
-	}
     }
 
     status = initialize_acc(id);
@@ -452,7 +435,6 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
 	pj_pool_release(acc->pool);
 	acc->pool = NULL;
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return status;
     }
 
@@ -479,7 +461,6 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
 	    pjsua_start_mwi(&pjsua_var.acc[id]);
     }
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -586,9 +567,6 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Deleting account %d..", acc_id));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
 
     /* Cancel any re-registration timer */
@@ -639,20 +617,9 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
 
     PJ_LOG(4,(THIS_FILE, "Account id %d deleted", acc_id));
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
-
-/* Get config */
-PJ_DEF(pj_status_t) pjsua_acc_get_config(pjsua_acc_id acc_id,
-                                         pjsua_acc_config *acc_cfg)
-{
-    PJ_ASSERT_RETURN(acc_id>=0 && acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc)
-                     && pjsua_var.acc[acc_id].valid, PJ_EINVAL);
-    pj_memcpy(acc_cfg, &pjsua_var.acc[acc_id].cfg, sizeof(*acc_cfg));
-    return PJ_SUCCESS;
-}
 
 /*
  * Modify account information.
@@ -673,16 +640,6 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
 
     PJ_ASSERT_RETURN(acc_id>=0 && acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc),
 		     PJ_EINVAL);
-
-    /* Verify media count */
-#if !defined(PJMEDIA_HAS_VIDEO) || (PJMEDIA_HAS_VIDEO == 0)
-    PJ_ASSERT_RETURN(cfg->max_video_cnt == 0, PJ_EINVAL);
-#endif
-    PJ_ASSERT_RETURN(cfg->max_audio_cnt + cfg->max_video_cnt <= 
-		     PJSUA_MAX_CALL_MEDIA, PJ_ETOOMANY);
-
-    PJ_LOG(4,(THIS_FILE, "Modifying accunt %d", acc_id));
-    pj_log_push_indent();
 
     PJSUA_LOCK();
 
@@ -1064,23 +1021,11 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
 	}
     }
 
-    /* Max number of audio and video stream in a call */
-    acc->cfg.max_audio_cnt = cfg->max_audio_cnt;
-    acc->cfg.max_video_cnt = cfg->max_video_cnt;
-
-    /* Video settings */
-    acc->cfg.vid_in_auto_show = cfg->vid_in_auto_show;
-    acc->cfg.vid_out_auto_transmit = cfg->vid_out_auto_transmit;
-    acc->cfg.vid_wnd_flags = cfg->vid_wnd_flags;
-    acc->cfg.vid_cap_dev = cfg->vid_cap_dev;
-    acc->cfg.vid_rend_dev = cfg->vid_rend_dev;
-
     /* Call hold type */
     acc->cfg.call_hold_type = cfg->call_hold_type;
 
 on_return:
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
     return status;
 }
 
@@ -1096,15 +1041,9 @@ PJ_DEF(pj_status_t) pjsua_acc_set_online_status( pjsua_acc_id acc_id,
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: setting online status to %d..",
-	      acc_id, is_online));
-    pj_log_push_indent();
-
     pjsua_var.acc[acc_id].online_status = is_online;
     pj_bzero(&pjsua_var.acc[acc_id].rpid, sizeof(pjrpid_element));
     pjsua_pres_update_acc(acc_id, PJ_FALSE);
-
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -1120,18 +1059,12 @@ PJ_DEF(pj_status_t) pjsua_acc_set_online_status2( pjsua_acc_id acc_id,
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: setting online status to %d..",
-    	      acc_id, is_online));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
     pjsua_var.acc[acc_id].online_status = is_online;
     pjrpid_element_dup(pjsua_var.acc[acc_id].pool, &pjsua_var.acc[acc_id].rpid, pr);
     PJSUA_UNLOCK();
 
     pjsua_pres_update_acc(acc_id, PJ_TRUE);
-    pj_log_pop_indent();
-
     return PJ_SUCCESS;
 }
 
@@ -1717,11 +1650,9 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
     PJSUA_LOCK();
 
     if (param->regc != acc->regc) {
-        PJSUA_UNLOCK();
+	PJSUA_UNLOCK();
 	return;
     }
-
-    pj_log_push_indent();
 
     /*
      * Print registration status.
@@ -1772,7 +1703,6 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
 	    /* Check NAT bound address */
 	    if (acc_check_nat_addr(acc, param)) {
 		PJSUA_UNLOCK();
-		pj_log_pop_indent();
 		return;
 	    }
 
@@ -1835,7 +1765,6 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
     }
     
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
 }
 
 
@@ -2023,10 +1952,6 @@ PJ_DEF(pj_status_t) pjsua_acc_set_registration( pjsua_acc_id acc_id,
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: setting %sregistration..",
-	      acc_id, (renew? "" : "un")));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
 
     /* Cancel any re-registration timer */
@@ -2106,13 +2031,12 @@ PJ_DEF(pj_status_t) pjsua_acc_set_registration( pjsua_acc_id acc_id,
 	pjsua_perror(THIS_FILE, "Unable to create/send REGISTER", 
 		     status);
     } else {
-	PJ_LOG(4,(THIS_FILE, "Acc %d: %s sent", acc_id,
+	PJ_LOG(3,(THIS_FILE, "%s sent",
 	         (renew? "Registration" : "Unregistration")));
     }
 
 on_return:
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
     return status;
 }
 
@@ -2875,10 +2799,6 @@ void pjsua_acc_on_tp_state_changed(pjsip_transport *tp,
     if (state != PJSIP_TP_STATE_DISCONNECTED)
 	return;
 
-    PJ_LOG(4,(THIS_FILE, "Disconnected notification for transport %s",
-	      tp->obj_name));
-    pj_log_push_indent();
-
     /* Shutdown this transport, to make sure that the transport manager 
      * will create a new transport for reconnection.
      */
@@ -2906,5 +2826,4 @@ void pjsua_acc_on_tp_state_changed(pjsip_transport *tp,
     }
 
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
 }

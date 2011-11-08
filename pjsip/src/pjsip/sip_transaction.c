@@ -1079,7 +1079,6 @@ static void tsx_timer_callback( pj_timer_heap_t *theap, pj_timer_entry *entry)
     
     PJ_LOG(5,(tsx->obj_name, "%s timer event", 
 	     (entry==&tsx->retransmit_timer ? "Retransmit":"Timeout")));
-    pj_log_push_indent();
 
 
     PJSIP_EVENT_INIT_TIMER(event, entry);
@@ -1088,8 +1087,6 @@ static void tsx_timer_callback( pj_timer_heap_t *theap, pj_timer_entry *entry)
     lock_tsx(tsx, &lck);
     (*tsx->state_handler)(tsx, &event);
     unlock_tsx(tsx, &lck);
-
-    pj_log_pop_indent();
 }
 
 
@@ -1109,7 +1106,6 @@ static void tsx_set_state( pjsip_transaction *tsx,
     PJ_LOG(5, (tsx->obj_name, "State changed from %s to %s, event=%s",
 	       state_str[tsx->state], state_str[state], 
                pjsip_event_str(event_src_type)));
-    pj_log_push_indent();
 
     /* Change state. */
     tsx->state = state;
@@ -1188,8 +1184,6 @@ static void tsx_set_state( pjsip_transaction *tsx,
 	/* Destroy transaction. */
 	tsx_destroy(tsx);
     }
-
-    pj_log_pop_indent();
 }
 
 
@@ -1323,10 +1317,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uac( pjsip_module *tsx_user,
     /* Unlock transaction and return. */
     unlock_tsx(tsx, &lck);
 
-    pj_log_push_indent();
     PJ_LOG(5,(tsx->obj_name, "Transaction created for %s",
 	      pjsip_tx_data_get_info(tdata)));
-    pj_log_pop_indent();
 
     *p_tsx = tsx;
     return PJ_SUCCESS;
@@ -1467,10 +1459,9 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas( pjsip_module *tsx_user,
     /* Unlock transaction and return. */
     unlock_tsx(tsx, &lck);
 
-    pj_log_push_indent();
+
     PJ_LOG(5,(tsx->obj_name, "Transaction created for %s",
 	      pjsip_rx_data_get_info(rdata)));
-    pj_log_pop_indent();
 
 
     *p_tsx = tsx;
@@ -1538,14 +1529,10 @@ PJ_DEF(pj_status_t) pjsip_tsx_terminate( pjsip_transaction *tsx, int code )
     if (tsx->state >= PJSIP_TSX_STATE_TERMINATED)
 	return PJ_SUCCESS;
 
-    pj_log_push_indent();
-
     lock_tsx(tsx, &lck);
     tsx_set_status_code(tsx, code, NULL);
     tsx_set_state( tsx, PJSIP_TSX_STATE_TERMINATED, PJSIP_EVENT_USER, NULL);
     unlock_tsx(tsx, &lck);
-
-    pj_log_pop_indent();
 
     return PJ_SUCCESS;
 }
@@ -1567,8 +1554,6 @@ PJ_DEF(pj_status_t) pjsip_tsx_stop_retransmit(pjsip_transaction *tsx)
 
     PJ_LOG(5,(tsx->obj_name, "Request to stop retransmission"));
 
-    pj_log_push_indent();
-
     lock_tsx(tsx, &lck);
     /* Cancel retransmission timer. */
     if (tsx->retransmit_timer.id != 0) {
@@ -1576,8 +1561,6 @@ PJ_DEF(pj_status_t) pjsip_tsx_stop_retransmit(pjsip_transaction *tsx)
 	tsx->retransmit_timer.id = 0;
     }
     unlock_tsx(tsx, &lck);
-
-    pj_log_pop_indent();
 
     return PJ_SUCCESS;
 }
@@ -1650,7 +1633,6 @@ PJ_DEF(pj_status_t) pjsip_tsx_send_msg( pjsip_transaction *tsx,
     PJ_LOG(5,(tsx->obj_name, "Sending %s in state %s",
                              pjsip_tx_data_get_info(tdata),
 			     state_str[tsx->state]));
-    pj_log_push_indent();
 
     PJSIP_EVENT_INIT_TX_MSG(event, tdata);
 
@@ -1672,8 +1654,6 @@ PJ_DEF(pj_status_t) pjsip_tsx_send_msg( pjsip_transaction *tsx,
 	pjsip_tx_data_dec_ref(tdata);
     }
 
-    pj_log_pop_indent();
-
     return status;
 }
 
@@ -1691,7 +1671,6 @@ PJ_DEF(void) pjsip_tsx_recv_msg( pjsip_transaction *tsx,
 
     PJ_LOG(5,(tsx->obj_name, "Incoming %s in state %s", 
 	      pjsip_rx_data_get_info(rdata), state_str[tsx->state]));
-    pj_log_push_indent();
 
     /* Put the transaction in the rdata's mod_data. */
     rdata->endpt_info.mod_data[mod_tsx_layer.mod.id] = tsx;
@@ -1703,8 +1682,6 @@ PJ_DEF(void) pjsip_tsx_recv_msg( pjsip_transaction *tsx,
     lock_tsx(tsx, &lck);
     status = (*tsx->state_handler)(tsx, &event);
     unlock_tsx(tsx, &lck);
-
-    pj_log_pop_indent();
 }
 
 
@@ -3220,7 +3197,13 @@ static pj_status_t tsx_on_state_terminated( pjsip_transaction *tsx,
                                             pjsip_event *event)
 {
     pj_assert(tsx->state == PJSIP_TSX_STATE_TERMINATED);
-    pj_assert(event->type == PJSIP_EVENT_TIMER);
+
+    /* Ignore events other than timer. This used to be an assertion but
+     * events may genuinely arrive at this state.
+     */
+    if (event->type != PJSIP_EVENT_TIMER) {
+	return PJ_EIGNORED;
+    }
 
     /* Destroy this transaction */
     tsx_set_state(tsx, PJSIP_TSX_STATE_DESTROYED, 
