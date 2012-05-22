@@ -40,22 +40,17 @@ OPTION          GCCE    -x c++
 
 SOURCE		alaw_ulaw.c
 SOURCE		alaw_ulaw_table.c
-SOURCE		avi_player.c
 SOURCE		bidirectional.c
 SOURCE		clock_thread.c
 SOURCE		codec.c
-SOURCE		conf_switch.c
 SOURCE		conference.c
-SOURCE		converter.c
-SOURCE		converter_libswscale.c
-SOURCE		delaybuf.c
+SOURCE		conf_switch.c
 SOURCE		echo_common.c
 SOURCE		echo_port.c
 SOURCE		echo_suppress.c
 SOURCE		endpoint.c
 SOURCE		errno.c
-SOURCE		event.c
-SOURCE		format.c
+SOURCE		delaybuf.c
 SOURCE		g711.c
 SOURCE		jbuf.c
 SOURCE		master_port.c
@@ -70,42 +65,22 @@ SOURCE		rtcp.c
 SOURCE		rtcp_xr.c
 SOURCE		rtp.c
 //SDP files are in pjsdp.mmp: sdp.c, sdp_cmp.c, sdp_neg.c
-//SOURCE		session.c		// deprecated
+SOURCE		session.c
 SOURCE		silencedet.c
 SOURCE		sound_port.c
 SOURCE		splitcomb.c
 SOURCE		stereo_port.c
 SOURCE		stream.c
-SOURCE		stream_common.c
-SOURCE		stream_info.c
 SOURCE		tonegen.c
 SOURCE		transport_adapter_sample.c
 SOURCE		transport_ice.c
 SOURCE		transport_udp.c
 SOURCE		transport_srtp.c
-SOURCE		types.c
-SOURCE		vid_codec.c
-SOURCE		vid_codec_util.c
-SOURCE		vid_port.c
-SOURCE		vid_stream.c
-SOURCE		vid_stream_info.c
-SOURCE		vid_tee.c
 SOURCE		wav_player.c
 SOURCE		wav_playlist.c
 SOURCE		wav_writer.c
 SOURCE		wave.c
 SOURCE		wsola.c
-
-//
-// pjmedia-codec common files
-//
-SOURCEPATH	..\pjmedia\src\pjmedia-codec
-SOURCE		audio_codecs.c
-SOURCE		amr_sdp_match.c
-SOURCE		g7221_sdp_match.c
-SOURCE		h263_packetizer.c
-SOURCE		h264_packetizer.c
-
 
 //
 // Symbian specific
