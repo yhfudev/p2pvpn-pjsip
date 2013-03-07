@@ -583,27 +583,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_set_transport( pjsip_dialog *dlg,
     return PJ_SUCCESS;
 }
 
-/*
- * Set "sent-by" field of Via header.
- */
-PJ_DEF(pj_status_t) pjsip_dlg_set_via_sent_by( pjsip_dialog *dlg,
-				               pjsip_host_port *via_addr,
-                                               pjsip_transport *via_tp)
-{
-    PJ_ASSERT_RETURN(dlg, PJ_EINVAL);
-
-    if (!via_addr)
-        pj_bzero(&dlg->via_addr, sizeof(dlg->via_addr));
-    else {
-        if (pj_strcmp(&dlg->via_addr.host, &via_addr->host))
-            pj_strdup(dlg->pool, &dlg->via_addr.host, &via_addr->host);
-        dlg->via_addr.port = via_addr->port;
-    }
-    dlg->via_tp = via_tp;
-
-    return PJ_SUCCESS;
-}
-
 
 /*
  * Create forked dialog from a response.
@@ -821,8 +800,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_inc_session( pjsip_dialog *dlg,
 {
     PJ_ASSERT_RETURN(dlg && mod, PJ_EINVAL);
 
-    pj_log_push_indent();
-
     pjsip_dlg_inc_lock(dlg);
     ++dlg->sess_count;
     pjsip_dlg_dec_lock(dlg);
@@ -830,7 +807,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_inc_session( pjsip_dialog *dlg,
     PJ_LOG(5,(dlg->obj_name, "Session count inc to %d by %.*s",
 	      dlg->sess_count, (int)mod->name.slen, mod->name.ptr));
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -911,8 +887,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_dec_session( pjsip_dialog *dlg,
 {
     PJ_ASSERT_RETURN(dlg, PJ_EINVAL);
 
-    pj_log_push_indent();
-
     PJ_LOG(5,(dlg->obj_name, "Session count dec to %d by %.*s",
 	      dlg->sess_count-1, (int)mod->name.slen, mod->name.ptr));
 
@@ -920,7 +894,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_dec_session( pjsip_dialog *dlg,
     --dlg->sess_count;
     pjsip_dlg_dec_lock(dlg);
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -1175,18 +1148,11 @@ PJ_DEF(pj_status_t) pjsip_dlg_send_request( pjsip_dialog *dlg,
     PJ_ASSERT_RETURN(tdata->msg->type == PJSIP_REQUEST_MSG,
 		     PJSIP_ENOTREQUESTMSG);
 
-    pj_log_push_indent();
     PJ_LOG(5,(dlg->obj_name, "Sending %s",
 	      pjsip_tx_data_get_info(tdata)));
 
     /* Lock and increment session */
     pjsip_dlg_inc_lock(dlg);
-
-    /* If via_addr is set, use this address for the Via header. */
-    if (dlg->via_addr.host.slen > 0) {
-        tdata->via_addr = dlg->via_addr;
-        tdata->via_tp = dlg->via_tp;
-    }
 
     /* Update dialog's CSeq and message's CSeq if request is not
      * ACK nor CANCEL.
@@ -1253,7 +1219,7 @@ PJ_DEF(pj_status_t) pjsip_dlg_send_request( pjsip_dialog *dlg,
 
     /* Unlock dialog, may destroy dialog. */
     pjsip_dlg_dec_lock(dlg);
-    pj_log_pop_indent();
+
     return PJ_SUCCESS;
 
 on_error:
@@ -1262,7 +1228,7 @@ on_error:
    
     /* Whatever happen delete the message. */
     pjsip_tx_data_dec_ref( tdata );
-    pj_log_pop_indent();
+
     return status;
 }
 
@@ -1440,8 +1406,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_send_response( pjsip_dialog *dlg,
     /* The transaction must belong to this dialog.  */
     PJ_ASSERT_RETURN(tsx->mod_data[dlg->ua->id] == dlg, PJ_EINVALIDOP);
 
-    pj_log_push_indent();
-
     PJ_LOG(5,(dlg->obj_name, "Sending %s",
 	      pjsip_tx_data_get_info(tdata)));
 
@@ -1486,7 +1450,6 @@ PJ_DEF(pj_status_t) pjsip_dlg_send_response( pjsip_dialog *dlg,
     }
 
     pjsip_dlg_dec_lock(dlg);
-    pj_log_pop_indent();
 
     return status;
 }
@@ -1554,7 +1517,6 @@ void pjsip_dlg_on_rx_request( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 
     PJ_LOG(5,(dlg->obj_name, "Received %s",
 	      pjsip_rx_data_get_info(rdata)));
-    pj_log_push_indent();
 
     /* Lock dialog and increment session. */
     pjsip_dlg_inc_lock(dlg);
@@ -1576,7 +1538,6 @@ void pjsip_dlg_on_rx_request( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 	warn_text = pj_str("Invalid CSeq");
 	pjsip_endpt_respond_stateless(dlg->endpt,
 				      rdata, 500, &warn_text, NULL, NULL);
-	pj_log_pop_indent();
 	return;
     }
 
@@ -1680,7 +1641,6 @@ void pjsip_dlg_on_rx_request( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 on_return:
     /* Unlock dialog and dec session, may destroy dialog. */
     pjsip_dlg_dec_lock(dlg);
-    pj_log_pop_indent();
 }
 
 /* Update route-set from incoming message */
@@ -1777,7 +1737,6 @@ void pjsip_dlg_on_rx_response( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 
     PJ_LOG(5,(dlg->obj_name, "Received %s",
 	      pjsip_rx_data_get_info(rdata)));
-    pj_log_push_indent();
 
     /* Lock the dialog and inc session. */
     pjsip_dlg_inc_lock(dlg);
@@ -1979,8 +1938,6 @@ void pjsip_dlg_on_rx_response( pjsip_dialog *dlg, pjsip_rx_data *rdata )
 
     /* Unlock dialog and dec session, may destroy dialog. */
     pjsip_dlg_dec_lock(dlg);
-
-    pj_log_pop_indent();
 }
 
 /* This function is called by user agent upon receiving transaction
@@ -1994,7 +1951,6 @@ void pjsip_dlg_on_tsx_state( pjsip_dialog *dlg,
 
     PJ_LOG(5,(dlg->obj_name, "Transaction %s state changed to %s",
 	      tsx->obj_name, pjsip_tsx_state_str(tsx->state)));
-    pj_log_push_indent();
 
     /* Lock the dialog and increment session. */
     pjsip_dlg_inc_lock(dlg);
@@ -2023,7 +1979,6 @@ void pjsip_dlg_on_tsx_state( pjsip_dialog *dlg,
 
     /* Unlock dialog and dec session, may destroy dialog. */
     pjsip_dlg_dec_lock(dlg);
-    pj_log_pop_indent();
 }
 
 

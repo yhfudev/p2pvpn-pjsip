@@ -34,7 +34,6 @@ PJ_BEGIN_DECL
  * @{
  */
 #include <pj/types.h>
-#include <pj/timer.h>
 
 
 /** 

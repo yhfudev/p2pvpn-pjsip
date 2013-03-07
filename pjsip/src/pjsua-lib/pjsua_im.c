@@ -512,9 +512,11 @@ PJ_DEF(pj_status_t) pjsua_im_send( pjsua_acc_id acc_id,
 {
     pjsip_tx_data *tdata;
     const pj_str_t mime_text_plain = pj_str("text/plain");
+    const pj_str_t STR_CONTACT = { "Contact", 7 };
     pjsip_media_type media_type;
     pjsua_im_data *im_data;
     pjsua_acc *acc;
+    pj_str_t contact;
     pj_status_t status;
 
     /* To and message body must be specified. */
@@ -549,11 +551,6 @@ PJ_DEF(pj_status_t) pjsua_im_send( pjsua_acc_id acc_id,
     /* Create suitable Contact header unless a Contact header has been
      * set in the account.
      */
-    /* Ticket #1632: According to RFC 3428:
-     * MESSAGE requests do not initiate dialogs.
-     * User Agents MUST NOT insert Contact header fields into MESSAGE requests
-     */
-    /*
     if (acc->contact.slen) {
 	contact = acc->contact;
     } else {
@@ -568,7 +565,6 @@ PJ_DEF(pj_status_t) pjsua_im_send( pjsua_acc_id acc_id,
     pjsip_msg_add_hdr( tdata->msg, (pjsip_hdr*)
 	pjsip_generic_string_hdr_create(tdata->pool, 
 					&STR_CONTACT, &contact));
-    */
 
     /* Create IM data to keep message details and give it back to
      * application on the callback
@@ -605,12 +601,6 @@ PJ_DEF(pj_status_t) pjsua_im_send( pjsua_acc_id acc_id,
     /* Add route set */
     pjsua_set_msg_route_set(tdata, &acc->route_set);
 
-    /* If via_addr is set, use this address for the Via header. */
-    if (acc->cfg.allow_via_rewrite && acc->via_addr.host.slen > 0) {
-        tdata->via_addr = acc->via_addr;
-        tdata->via_tp = acc->via_tp;
-    }
-
     /* Send request (statefully) */
     status = pjsip_endpt_send_request( pjsua_var.endpt, tdata, -1, 
 				       im_data, &im_callback);
@@ -631,9 +621,11 @@ PJ_DEF(pj_status_t) pjsua_im_typing( pjsua_acc_id acc_id,
 				     pj_bool_t is_typing,
 				     const pjsua_msg_data *msg_data)
 {
+    const pj_str_t STR_CONTACT = { "Contact", 7 };
     pjsua_im_data *im_data;
     pjsip_tx_data *tdata;
     pjsua_acc *acc;
+    pj_str_t contact;
     pj_status_t status;
 
     acc = &pjsua_var.acc[acc_id];
@@ -666,11 +658,6 @@ PJ_DEF(pj_status_t) pjsua_im_typing( pjsua_acc_id acc_id,
     /* Create suitable Contact header unless a Contact header has been
      * set in the account.
      */
-    /* Ticket #1632: According to RFC 3428:
-     * MESSAGE requests do not initiate dialogs.
-     * User Agents MUST NOT insert Contact header fields into MESSAGE requests
-     */
-    /*
     if (acc->contact.slen) {
 	contact = acc->contact;
     } else {
@@ -685,7 +672,7 @@ PJ_DEF(pj_status_t) pjsua_im_typing( pjsua_acc_id acc_id,
     pjsip_msg_add_hdr( tdata->msg, (pjsip_hdr*)
 	pjsip_generic_string_hdr_create(tdata->pool, 
 					&STR_CONTACT, &contact));
-    */
+
 
     /* Create "application/im-iscomposing+xml" msg body. */
     tdata->msg->body = pjsip_iscomposing_create_body( tdata->pool, is_typing,
@@ -696,12 +683,6 @@ PJ_DEF(pj_status_t) pjsua_im_typing( pjsua_acc_id acc_id,
 
     /* Add route set */
     pjsua_set_msg_route_set(tdata, &acc->route_set);
-
-    /* If via_addr is set, use this address for the Via header. */
-    if (acc->cfg.allow_via_rewrite && acc->via_addr.host.slen > 0) {
-        tdata->via_addr = acc->via_addr;
-        tdata->via_tp = acc->via_tp;
-    }
 
     /* Create data to reauthenticate */
     im_data = PJ_POOL_ZALLOC_T(tdata->pool, pjsua_im_data);

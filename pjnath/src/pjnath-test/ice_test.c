@@ -29,9 +29,7 @@ enum
 
 #define NODELAY		0xFFFFFFFF
 #define SRV_DOMAIN	"pjsip.lab.domain"
-#define MAX_THREADS	16
 
-#define THIS_FILE	"ice_test.c"
 #define INDENT		"    "
 
 /* Client flags */
@@ -50,7 +48,7 @@ struct test_result
     unsigned	rx_cnt[4];	/* Number of data received	*/
 };
 
-/*  Role    comp#   host?   stun?   turn?   flag?  ans_del snd_del des_del */
+
 /* Test session configuration */
 struct test_cfg
 {
@@ -62,8 +60,8 @@ struct test_cfg
     unsigned	client_flag;	/* Client flags			*/
 
     unsigned    answer_delay;	/* Delay before sending SDP	*/
-    unsigned	send_delay;	/* unused */
-    unsigned	destroy_delay;	/* unused */
+    unsigned    send_delay;	/* Delay before sending data	*/
+    unsigned    destroy_delay;	/* Delay before destroy()	*/
 
     struct test_result expected;/* Expected result		*/
 
@@ -81,17 +79,6 @@ struct ice_ept
     pj_str_t		 pass;	/* password			*/
 };
 
-/* Session param */
-struct sess_param
-{
-    unsigned		 worker_cnt;
-    unsigned		 worker_timeout;
-    pj_bool_t		 worker_quit;
-
-    pj_bool_t		 destroy_after_create;
-    pj_bool_t		 destroy_after_one_done;
-};
-
 /* The test session */
 struct test_sess
 {
@@ -99,11 +86,7 @@ struct test_sess
     pj_stun_config	*stun_cfg;
     pj_dns_resolver	*resolver;
 
-    struct sess_param	*param;
-
     test_server		*server;
-
-    pj_thread_t		*worker_threads[MAX_THREADS];
 
     unsigned		 server_flag;
     struct ice_ept	 caller;
@@ -207,7 +190,6 @@ static int create_sess(pj_stun_config *stun_cfg,
 		       unsigned server_flag,
 		       struct test_cfg *caller_cfg,
 		       struct test_cfg *callee_cfg,
-		       struct sess_param *test_param,
 		       struct test_sess **p_sess)
 {
     pj_pool_t *pool;
@@ -222,7 +204,6 @@ static int create_sess(pj_stun_config *stun_cfg,
     sess = PJ_POOL_ZALLOC_T(pool, struct test_sess);
     sess->pool = pool;
     sess->stun_cfg = stun_cfg;
-    sess->param = test_param;
 
     pj_memcpy(&sess->caller.cfg, caller_cfg, sizeof(*caller_cfg));
     sess->caller.result.init_status = sess->caller.result.nego_status = PJ_EPENDING;
@@ -280,8 +261,6 @@ static int create_sess(pj_stun_config *stun_cfg,
 /* Destroy test session */
 static void destroy_sess(struct test_sess *sess, unsigned wait_msec)
 {
-    unsigned i;
-
     if (sess->caller.ice) {
 	pj_ice_strans_destroy(sess->caller.ice);
 	sess->caller.ice = NULL;
@@ -290,12 +269,6 @@ static void destroy_sess(struct test_sess *sess, unsigned wait_msec)
     if (sess->callee.ice) {
 	pj_ice_strans_destroy(sess->callee.ice);
 	sess->callee.ice = NULL;
-    }
-
-    sess->param->worker_quit = PJ_TRUE;
-    for (i=0; i<sess->param->worker_cnt; ++i) {
-	if (sess->worker_threads[i])
-	    pj_thread_join(sess->worker_threads[i]);
     }
 
     poll_events(sess->stun_cfg, wait_msec, PJ_FALSE);
@@ -352,9 +325,6 @@ static void ice_on_ice_complete(pj_ice_strans *ice_st,
 	break;
     case PJ_ICE_STRANS_OP_NEGOTIATION:
 	ept->result.nego_status = status;
-	break;
-    case PJ_ICE_STRANS_OP_KEEP_ALIVE:
-	/* keep alive failed? */
 	break;
     default:
 	pj_assert(!"Unknown op");
@@ -414,20 +384,20 @@ static int check_pair(const struct ice_ept *ept1, const struct ice_ept *ept2,
 
 	c1 = pj_ice_strans_get_valid_pair(ept1->ice, i+1);
 	if (c1 == NULL) {
-	    PJ_LOG(3,(THIS_FILE, INDENT "err: unable to get valid pair for ice1 "
+	    PJ_LOG(3,("", INDENT "err: unable to get valid pair for ice1 "
 			  "component %d", i+1));
 	    return start_err - 2;
 	}
 
 	c2 = pj_ice_strans_get_valid_pair(ept2->ice, i+1);
 	if (c2 == NULL) {
-	    PJ_LOG(3,(THIS_FILE, INDENT "err: unable to get valid pair for ice2 "
+	    PJ_LOG(3,("", INDENT "err: unable to get valid pair for ice2 "
 			  "component %d", i+1));
 	    return start_err - 4;
 	}
 
 	if (pj_sockaddr_cmp(&c1->rcand->addr, &c2->lcand->addr) != 0) {
-	    PJ_LOG(3,(THIS_FILE, INDENT "err: candidate pair does not match "
+	    PJ_LOG(3,("", INDENT "err: candidate pair does not match "
 			  "for component %d", i+1));
 	    return start_err - 6;
 	}
@@ -438,14 +408,14 @@ static int check_pair(const struct ice_ept *ept1, const struct ice_ept *ept2,
 	if (ept1->cfg.comp_cnt>i &&
 	    pj_ice_strans_get_valid_pair(ept1->ice, i+1) != NULL) 
 	{
-	    PJ_LOG(3,(THIS_FILE, INDENT "err: ice1 shouldn't have valid pair "
+	    PJ_LOG(3,("", INDENT "err: ice1 shouldn't have valid pair "
 		          "for component %d", i+1));
 	    return start_err - 8;
 	}
 	if (ept2->cfg.comp_cnt>i &&
 	    pj_ice_strans_get_valid_pair(ept2->ice, i+1) != NULL) 
 	{
-	    PJ_LOG(3,(THIS_FILE, INDENT "err: ice2 shouldn't have valid pair "
+	    PJ_LOG(3,("", INDENT "err: ice2 shouldn't have valid pair "
 		          "for component %d", i+1));
 	    return start_err - 9;
 	}
@@ -466,44 +436,26 @@ static int check_pair(const struct ice_ept *ept1, const struct ice_ept *ept2,
 					rc = PJ_SUCCESS; \
 					break; \
 				    } \
-				    PJ_TIME_VAL_SUB(t, t0); \
-				    if ((unsigned)PJ_TIME_VAL_MSEC(t) >= (timeout)) \
-					break; \
+				    if (t.sec - t0.sec > (timeout)) break; \
 				} \
 			    }
 
-int worker_thread_proc(void *data)
-{
-    pj_status_t rc;
-    struct test_sess *sess = (struct test_sess *) data;
-    pj_stun_config *stun_cfg = sess->stun_cfg;
-    
-    /* Wait until negotiation is complete on both endpoints */
-#define ALL_DONE    (sess->param->worker_quit || \
-			(sess->caller.result.nego_status!=PJ_EPENDING && \
-			 sess->callee.result.nego_status!=PJ_EPENDING))
-    WAIT_UNTIL(sess->param->worker_timeout, ALL_DONE, rc);
-    
-    return 0;
-}
 
-static int perform_test2(const char *title,
-			 pj_stun_config *stun_cfg,
-                         unsigned server_flag,
-		         struct test_cfg *caller_cfg,
-		         struct test_cfg *callee_cfg,
-		         struct sess_param *test_param)
+static int perform_test(const char *title,
+			pj_stun_config *stun_cfg,
+			unsigned server_flag,
+		        struct test_cfg *caller_cfg,
+		        struct test_cfg *callee_cfg)
 {
     pjlib_state pjlib_state;
     struct test_sess *sess;
-    unsigned i;
     int rc;
 
-    PJ_LOG(3,(THIS_FILE, INDENT "%s", title));
+    PJ_LOG(3,("", INDENT "%s", title));
 
     capture_pjlib_state(stun_cfg, &pjlib_state);
 
-    rc = create_sess(stun_cfg, server_flag, caller_cfg, callee_cfg, test_param, &sess);
+    rc = create_sess(stun_cfg, server_flag, caller_cfg, callee_cfg, &sess);
     if (rc != 0)
 	return rc;
 
@@ -511,10 +463,10 @@ static int perform_test2(const char *title,
 		     sess->callee.result.init_status!=PJ_EPENDING)
 
     /* Wait until both ICE transports are initialized */
-    WAIT_UNTIL(30000, ALL_READY, rc);
+    WAIT_UNTIL(30, ALL_READY, rc);
 
     if (!ALL_READY) {
-	PJ_LOG(3,(THIS_FILE, INDENT "err: init timed-out"));
+	PJ_LOG(3,("", INDENT "err: init timed-out"));
 	destroy_sess(sess, 500);
 	return -100;
     }
@@ -537,6 +489,7 @@ static int perform_test2(const char *title,
 	rc = 0;
 	goto on_return;
     }
+
     /* Init ICE on caller */
     rc = pj_ice_strans_init_ice(sess->caller.ice, sess->caller.cfg.role, 
 				&sess->caller.ufrag, &sess->caller.pass);
@@ -554,14 +507,17 @@ static int perform_test2(const char *title,
 	destroy_sess(sess, 500);
 	return -110;
     }
+
     /* Start ICE on callee */
     rc = start_ice(&sess->callee, &sess->caller);
     if (rc != PJ_SUCCESS) {
 	destroy_sess(sess, 500);
 	return -120;
     }
+
     /* Wait for callee's answer_delay */
     poll_events(stun_cfg, sess->callee.cfg.answer_delay, PJ_FALSE);
+
     /* Start ICE on caller */
     rc = start_ice(&sess->caller, &sess->callee);
     if (rc != PJ_SUCCESS) {
@@ -569,37 +525,13 @@ static int perform_test2(const char *title,
 	return -130;
     }
 
-    for (i=0; i<sess->param->worker_cnt; ++i) {
-	pj_status_t status;
+    /* Wait until negotiation is complete on both endpoints */
+#define ALL_DONE    (sess->caller.result.nego_status!=PJ_EPENDING && \
+		     sess->callee.result.nego_status!=PJ_EPENDING)
+    WAIT_UNTIL(30, ALL_DONE, rc);
 
-	status = pj_thread_create(sess->pool, "worker_thread",
-				  worker_thread_proc, sess, 0, 0,
-				  &sess->worker_threads[i]);
-	if (status != PJ_SUCCESS) {
-	    PJ_LOG(3,(THIS_FILE, INDENT "err: create thread"));
-	    destroy_sess(sess, 500);
-	    return -135;
-	}
-    }
-
-    if (sess->param->destroy_after_create)
-	goto on_destroy;
-
-    if (sess->param->destroy_after_one_done) {
-	while (sess->caller.result.init_status==PJ_EPENDING &&
-	       sess->callee.result.init_status==PJ_EPENDING)
-	{
-	    if (sess->param->worker_cnt)
-		pj_thread_sleep(0);
-	    else
-		poll_events(stun_cfg, 0, PJ_FALSE);
-	}
-	goto on_destroy;
-    }
-    
-    WAIT_UNTIL(30000, ALL_DONE, rc);
     if (!ALL_DONE) {
-	PJ_LOG(3,(THIS_FILE, INDENT "err: negotiation timed-out"));
+	PJ_LOG(3,("", INDENT "err: negotiation timed-out"));
 	destroy_sess(sess, 500);
 	return -140;
     }
@@ -629,7 +561,6 @@ static int perform_test2(const char *title,
     }
 
     /* Looks like everything is okay */
-on_destroy:
 
     /* Destroy ICE stream transports first to let it de-allocate
      * TURN relay (otherwise there'll be timer/memory leak, unless
@@ -647,7 +578,7 @@ on_destroy:
 
 on_return:
     /* Wait.. */
-    poll_events(stun_cfg, 200, PJ_FALSE);
+    poll_events(stun_cfg, 500, PJ_FALSE);
 
     /* Now destroy everything */
     destroy_sess(sess, 500);
@@ -660,20 +591,7 @@ on_return:
 	return rc;
     }
 
-    return rc;
-}
-
-static int perform_test(const char *title,
-                        pj_stun_config *stun_cfg,
-                        unsigned server_flag,
-                        struct test_cfg *caller_cfg,
-                        struct test_cfg *callee_cfg)
-{
-    struct sess_param test_param;
-
-    pj_bzero(&test_param, sizeof(test_param));
-    return perform_test2(title, stun_cfg, server_flag, caller_cfg,
-                         callee_cfg, &test_param);
+    return 0;
 }
 
 #define ROLE1	PJ_ICE_SESS_ROLE_CONTROLLED
@@ -762,7 +680,7 @@ int ice_test(void)
 	if (rc != 0)
 	    goto on_return;
     }
-    
+
     /* Simple test first with srflx candidate */
     if (1) {
 	struct sess_cfg_t cfg = 
@@ -826,7 +744,7 @@ int ice_test(void)
 	    {ROLE2,	2,	 NO,    YES,	    NO,	    0,	    0,	    0,	    0, {PJNATH_ESTUNTIMEDOUT, -1}}
 	};
 
-	rc = perform_test(cfg.title, &stun_cfg, cfg.server_flag,
+	rc = perform_test(cfg.title, &stun_cfg, cfg.server_flag, 
 			  &cfg.ua1, &cfg.ua2);
 	if (rc != 0)
 	    goto on_return;
@@ -867,7 +785,6 @@ int ice_test(void)
 	    goto on_return;
     }
 
-
     /* STUN failure, testing TURN deallocation */
     if (1) {
 	struct sess_cfg_t cfg = 
@@ -875,11 +792,11 @@ int ice_test(void)
 	    "STUN failure, testing TURN deallocation",
 	    0xFFFF & (~(CREATE_STUN_SERVER)),
 	    /*  Role    comp#   host?   stun?   turn?   flag?  ans_del snd_del des_del */
-	    {ROLE1,	1,	 YES,    YES,	YES,	0,    0,	    0,	    0, {PJNATH_ESTUNTIMEDOUT, -1}},
-	    {ROLE2,	1,	 YES,    YES,	YES,	0,    0,	    0,	    0, {PJNATH_ESTUNTIMEDOUT, -1}}
+	    {ROLE1,	2,	 YES,    YES,	YES,	0,    0,	    0,	    0, {PJNATH_ESTUNTIMEDOUT, -1}},
+	    {ROLE2,	2,	 YES,    YES,	YES,	0,    0,	    0,	    0, {PJNATH_ESTUNTIMEDOUT, -1}}
 	};
 
-	rc = perform_test(cfg.title, &stun_cfg, cfg.server_flag,
+	rc = perform_test(cfg.title, &stun_cfg, cfg.server_flag, 
 			  &cfg.ua1, &cfg.ua2);
 	if (rc != 0)
 	    goto on_return;
@@ -901,7 +818,7 @@ int ice_test(void)
 	unsigned delay[] = { 50, 2000 };
 	unsigned d;
 
-	PJ_LOG(3,(THIS_FILE, "  %s", cfg->title));
+	PJ_LOG(3,("", "  %s", cfg->title));
 
 	/* For each test item, test with various answer delay */
 	for (d=0; d<PJ_ARRAY_SIZE(delay); ++d) {
@@ -959,89 +876,3 @@ on_return:
     return rc;
 }
 
-int ice_one_conc_test(pj_stun_config *stun_cfg, int err_quit)
-{
-    struct sess_cfg_t {
-	const char	*title;
-	unsigned	 server_flag;
-	struct test_cfg	 ua1;
-	struct test_cfg	 ua2;
-    } cfg =
-    {
-	"Concurrency test",
-	0xFFFF,
-	/*  Role    comp#   host?   stun?   turn?   flag?  ans_del snd_del des_del */
-	{ROLE1,	1,	YES,     YES,	    YES,    0,	    0,	    0,	    0, {PJ_SUCCESS, PJ_SUCCESS}},
-	{ROLE2,	1,	YES,     YES,	    YES,    0,	    0,	    0,	    0, {PJ_SUCCESS, PJ_SUCCESS}}
-    };
-    struct sess_param test_param;
-    int rc;
-
-
-    /* test a: destroy as soon as nego starts */
-    cfg.title = "    ice test a: immediate destroy";
-    pj_bzero(&test_param, sizeof(test_param));
-    test_param.worker_cnt = 4;
-    test_param.worker_timeout = 1000;
-    test_param.destroy_after_create = PJ_TRUE;
-
-    rc = perform_test2(cfg.title, stun_cfg, cfg.server_flag,
-                       &cfg.ua1, &cfg.ua2, &test_param);
-    if (rc != 0 && err_quit)
-        return rc;
-
-    /* test b: destroy as soon as one is done */
-    cfg.title = "    ice test b: destroy after 1 success";
-    test_param.destroy_after_create = PJ_FALSE;
-    test_param.destroy_after_one_done = PJ_TRUE;
-
-    rc = perform_test2(cfg.title, stun_cfg, cfg.server_flag,
-                       &cfg.ua1, &cfg.ua2, &test_param);
-    if (rc != 0 && err_quit)
-        return rc;
-
-    /* test c: normal */
-    cfg.title = "    ice test c: normal flow";
-    pj_bzero(&test_param, sizeof(test_param));
-    test_param.worker_cnt = 4;
-    test_param.worker_timeout = 1000;
-
-    rc = perform_test2(cfg.title, stun_cfg, cfg.server_flag,
-                       &cfg.ua1, &cfg.ua2, &test_param);
-    if (rc != 0 && err_quit)
-        return rc;
-
-    return 0;
-}
-
-int ice_conc_test(void)
-{
-    const unsigned LOOP = 100;
-    pj_pool_t *pool;
-    pj_stun_config stun_cfg;
-    unsigned i;
-    int rc;
-    
-    pool = pj_pool_create(mem, NULL, 512, 512, NULL);
-    rc = create_stun_config(pool, &stun_cfg);
-    if (rc != PJ_SUCCESS) {
-	pj_pool_release(pool);
-	return -7;
-    }
-    
-    for (i = 0; i < LOOP; i++) {
-	PJ_LOG(3,(THIS_FILE, INDENT "Test %d of %d", i+1, LOOP));
-	rc = ice_one_conc_test(&stun_cfg, PJ_TRUE);
-	if (rc)
-	    break;
-    }
-
-    /* Avoid compiler warning */
-    goto on_return;
-    
-on_return:
-    destroy_stun_config(&stun_cfg);
-    pj_pool_release(pool);
-
-    return rc;
-}

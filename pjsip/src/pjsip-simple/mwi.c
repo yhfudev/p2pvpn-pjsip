@@ -32,6 +32,7 @@
 
 
 #define THIS_FILE		    "mwi.c"
+#define MWI_DEFAULT_EXPIRES	    3600
 
  /*
  * MWI module (mod-mdi)
@@ -137,7 +138,7 @@ PJ_DEF(pj_status_t) pjsip_mwi_init_module( pjsip_endpoint *endpt,
 
     /* Register event package to event module. */
     status = pjsip_evsub_register_pkg( &mod_mwi, &STR_MWI, 
-				       PJSIP_MWI_DEFAULT_EXPIRES, 
+				       MWI_DEFAULT_EXPIRES, 
 				       PJ_ARRAY_SIZE(accept), accept);
     if (status != PJ_SUCCESS) {
 	pjsip_endpt_unregister_module(endpt, &mod_mwi);

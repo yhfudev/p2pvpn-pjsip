@@ -78,10 +78,6 @@ pjmedia_aud_dev_factory* pjmedia_coreaudio_factory(pj_pool_factory *pf);
 pjmedia_aud_dev_factory* pjmedia_alsa_factory(pj_pool_factory *pf);
 #endif
 
-#if PJMEDIA_AUDIO_DEV_HAS_BB10
-pjmedia_aud_dev_factory* pjmedia_bb10_factory(pj_pool_factory *pf);
-#endif
-
 #if PJMEDIA_AUDIO_DEV_HAS_WMME
 pjmedia_aud_dev_factory* pjmedia_wmme_factory(pj_pool_factory *pf);
 #endif
@@ -194,11 +190,9 @@ static pj_status_t get_cap_pointer(const pjmedia_aud_param *param,
     case PJMEDIA_AUD_DEV_CAP_EC_TAIL:
 	FIELD_INFO(ec_tail_ms);
 	break;
-    /* vad is no longer in "fmt" in 2.0.
     case PJMEDIA_AUD_DEV_CAP_VAD:
 	FIELD_INFO(ext_fmt.vad);
 	break;
-    */
     case PJMEDIA_AUD_DEV_CAP_CNG:
 	FIELD_INFO(cng_enabled);
 	break;
@@ -391,9 +385,6 @@ PJ_DEF(pj_status_t) pjmedia_aud_subsys_init(pj_pool_factory *pf)
     aud_subsys.dev_cnt = 0;
 
     /* Register creation functions */
-#if PJMEDIA_AUDIO_DEV_HAS_BB10
-    aud_subsys.drv[aud_subsys.drv_cnt++].create = &pjmedia_bb10_factory;
-#endif
 #if PJMEDIA_AUDIO_DEV_HAS_ALSA
     aud_subsys.drv[aud_subsys.drv_cnt++].create = &pjmedia_alsa_factory;
 #endif

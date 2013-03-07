@@ -131,11 +131,7 @@ PJ_DEF(void) pjsua_acc_config_dup( pj_pool_t *pool,
 
     pjsip_auth_clt_pref_dup(pool, &dst->auth_pref, &src->auth_pref);
 
-    pjsua_transport_config_dup(pool, &dst->rtp_cfg, &src->rtp_cfg);
-
-    pjsua_ice_config_dup(pool, &dst->ice_cfg, &src->ice_cfg);
-    pjsua_turn_config_dup(pool, &dst->turn_cfg, &src->turn_cfg);
-
+    dst->ka_interval = src->ka_interval;
     pj_strdup(pool, &dst->ka_data, &src->ka_data);
 }
 
@@ -286,7 +282,7 @@ static pj_status_t initialize_acc(unsigned acc_id)
      * contact params.
      */
 #if PJSUA_ADD_ICE_TAGS
-    if (acc_cfg->ice_cfg.enable_ice) {
+    if (pjsua_var.media_cfg.enable_ice) {
 	unsigned new_len;
 	pj_str_t new_prm;
 
@@ -351,18 +347,6 @@ static pj_status_t initialize_acc(unsigned acc_id)
 	}
     }
 
-    /* If account's ICE and TURN customization is not set, then
-     * initialize it with the settings from the global media config.
-     */
-    if (acc->cfg.ice_cfg_use == PJSUA_ICE_CONFIG_USE_DEFAULT) {
-	pjsua_ice_config_from_media_config(NULL, &acc->cfg.ice_cfg,
-	                                &pjsua_var.media_cfg);
-    }
-    if (acc->cfg.turn_cfg_use == PJSUA_TURN_CONFIG_USE_DEFAULT) {
-	pjsua_turn_config_from_media_config(NULL, &acc->cfg.turn_cfg,
-	                                    &pjsua_var.media_cfg);
-    }
-
     /* Mark account as valid */
     pjsua_var.acc[acc_id].valid = PJ_TRUE;
 
@@ -390,18 +374,13 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
 {
     pjsua_acc *acc;
     unsigned i, id;
-    pj_status_t status = PJ_SUCCESS;
+    pj_status_t status;
 
-    PJ_ASSERT_RETURN(cfg, PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc_cnt < PJ_ARRAY_SIZE(pjsua_var.acc),
 		     PJ_ETOOMANY);
 
     /* Must have a transport */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[0].data.ptr != NULL, PJ_EINVALIDOP);
-
-    PJ_LOG(4,(THIS_FILE, "Adding account: id=%.*s",
-	      (int)cfg->id.slen, cfg->id.ptr));
-    pj_log_push_indent();
 
     PJSUA_LOCK();
 
@@ -440,11 +419,8 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
     /* Check the route URI's and force loose route if required */
     for (i=0; i<acc->cfg.proxy_cnt; ++i) {
 	status = normalize_route_uri(acc->pool, &acc->cfg.proxy[i]);
-	if (status != PJ_SUCCESS) {
-	    PJSUA_UNLOCK();
-	    pj_log_pop_indent();
+	if (status != PJ_SUCCESS)
 	    return status;
-	}
     }
 
     /* Get CRC of account proxy setting */
@@ -460,7 +436,6 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
 	pj_pool_release(acc->pool);
 	acc->pool = NULL;
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return status;
     }
 
@@ -484,14 +459,9 @@ PJ_DEF(pj_status_t) pjsua_acc_add( const pjsua_acc_config *cfg,
     } else {
 	/* Otherwise subscribe to MWI, if it's enabled */
 	if (pjsua_var.acc[id].cfg.mwi_enabled)
-	    pjsua_start_mwi(id, PJ_TRUE);
-
-	/* Start publish too */
-	if (acc->cfg.publish_enabled)
-	    pjsua_pres_init_publish_acc(id);
+	    pjsua_start_mwi(&pjsua_var.acc[id]);
     }
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -599,9 +569,6 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Deleting account %d..", acc_id));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
 
     acc = &pjsua_var.acc[acc_id];
@@ -617,10 +584,7 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
     }
 
     /* Cancel any re-registration timer */
-    if (acc->auto_rereg.timer.id) {
-	acc->auto_rereg.timer.id = PJ_FALSE;
-	pjsua_cancel_timer(&acc->auto_rereg.timer);
-    }
+    pjsua_cancel_timer(&acc->auto_rereg.timer);
 
     /* Delete registration */
     if (acc->regc != NULL) {
@@ -629,12 +593,6 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
 	    pjsip_regc_destroy(acc->regc);
 	}
 	acc->regc = NULL;
-    }
-
-    /* Terminate mwi subscription */
-    if (acc->cfg.mwi_enabled) {
-        acc->cfg.mwi_enabled = PJ_FALSE;
-        pjsua_start_mwi(acc_id, PJ_FALSE);
     }
 
     /* Delete server presence subscription */
@@ -649,8 +607,6 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
     /* Invalidate */
     acc->valid = PJ_FALSE;
     acc->contact.slen = 0;
-    pj_bzero(&acc->via_addr, sizeof(acc->via_addr));
-    acc->via_tp = NULL;
 
     /* Remove from array */
     for (i=0; i<pjsua_var.acc_cnt; ++i) {
@@ -675,20 +631,9 @@ PJ_DEF(pj_status_t) pjsua_acc_del(pjsua_acc_id acc_id)
 
     PJ_LOG(4,(THIS_FILE, "Account id %d deleted", acc_id));
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
-
-/* Get config */
-PJ_DEF(pj_status_t) pjsua_acc_get_config(pjsua_acc_id acc_id,
-                                         pjsua_acc_config *acc_cfg)
-{
-    PJ_ASSERT_RETURN(acc_id>=0 && acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc)
-                     && pjsua_var.acc[acc_id].valid, PJ_EINVAL);
-    pj_memcpy(acc_cfg, &pjsua_var.acc[acc_id].cfg, sizeof(*acc_cfg));
-    return PJ_SUCCESS;
-}
 
 /*
  * Modify account information.
@@ -706,14 +651,10 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
     pj_str_t acc_proxy[PJSUA_ACC_MAX_PROXIES];
     pj_bool_t update_reg = PJ_FALSE;
     pj_bool_t unreg_first = PJ_FALSE;
-    pj_bool_t update_mwi = PJ_FALSE;
     pj_status_t status = PJ_SUCCESS;
 
     PJ_ASSERT_RETURN(acc_id>=0 && acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc),
 		     PJ_EINVAL);
-
-    PJ_LOG(4,(THIS_FILE, "Modifying accunt %d", acc_id));
-    pj_log_push_indent();
 
     PJSUA_LOCK();
 
@@ -866,14 +807,7 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
     }
 
     /* MWI */
-    if (acc->cfg.mwi_enabled != cfg->mwi_enabled) {
-	acc->cfg.mwi_enabled = cfg->mwi_enabled;
-	update_mwi = PJ_TRUE;
-    }
-    if (acc->cfg.mwi_expires != cfg->mwi_expires && cfg->mwi_expires > 0) {
-	acc->cfg.mwi_expires = cfg->mwi_expires;
-	update_mwi = PJ_TRUE;
-    }
+    acc->cfg.mwi_enabled = cfg->mwi_enabled;
 
     /* PIDF tuple ID */
     if (pj_strcmp(&acc->cfg.pidf_tuple_id, &cfg->pidf_tuple_id))
@@ -1117,25 +1051,6 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
 						cfg->reg_delay_before_refresh);
     }
 
-    /* Allow via rewrite */
-    if (acc->cfg.allow_via_rewrite != cfg->allow_via_rewrite) {
-        if (acc->regc != NULL) {
-            if (cfg->allow_via_rewrite) {
-                pjsip_regc_set_via_sent_by(acc->regc, &acc->via_addr,
-                                           acc->via_tp);
-            } else
-                pjsip_regc_set_via_sent_by(acc->regc, NULL, NULL);
-        }
-        if (acc->publish_sess != NULL) {
-            if (cfg->allow_via_rewrite) {
-                pjsip_publishc_set_via_sent_by(acc->publish_sess,
-                                               &acc->via_addr, acc->via_tp);
-            } else
-                pjsip_publishc_set_via_sent_by(acc->publish_sess, NULL, NULL);
-        }
-        acc->cfg.allow_via_rewrite = cfg->allow_via_rewrite;
-    }
-
     /* Normalize registration timeout and refresh delay */
     if (acc->cfg.reg_uri.slen ) {
         if (acc->cfg.reg_timeout == 0) {
@@ -1171,70 +1086,6 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
 	update_reg = PJ_TRUE;
     }
 
-    /* Video settings */
-    acc->cfg.vid_in_auto_show = cfg->vid_in_auto_show;
-    acc->cfg.vid_out_auto_transmit = cfg->vid_out_auto_transmit;
-    acc->cfg.vid_wnd_flags = cfg->vid_wnd_flags;
-    acc->cfg.vid_cap_dev = cfg->vid_cap_dev;
-    acc->cfg.vid_rend_dev = cfg->vid_rend_dev;
-    acc->cfg.vid_stream_rc_cfg = cfg->vid_stream_rc_cfg;
-
-    /* Media settings */
-    if (pj_stricmp(&acc->cfg.rtp_cfg.public_addr, &cfg->rtp_cfg.public_addr) ||
-	pj_stricmp(&acc->cfg.rtp_cfg.bound_addr, &cfg->rtp_cfg.bound_addr))
-    {
-	pjsua_transport_config_dup(acc->pool, &acc->cfg.rtp_cfg,
-				   &cfg->rtp_cfg);
-    } else {
-	/* ..to save memory by not using the pool */
-	acc->cfg.rtp_cfg =  cfg->rtp_cfg;
-    }
-
-    acc->cfg.ipv6_media_use = cfg->ipv6_media_use;
-
-    /* STUN and Media customization */
-    if (acc->cfg.sip_stun_use != cfg->sip_stun_use) {
-	acc->cfg.sip_stun_use = cfg->sip_stun_use;
-	update_reg = PJ_TRUE;
-    }
-    acc->cfg.media_stun_use = cfg->media_stun_use;
-
-    /* ICE settings */
-    acc->cfg.ice_cfg_use = cfg->ice_cfg_use;
-    switch (acc->cfg.ice_cfg_use) {
-    case PJSUA_ICE_CONFIG_USE_DEFAULT:
-	/* Copy ICE settings from media settings so that we don't need to
-	 * check the media config if we look for ICE config.
-	 */
-	pjsua_ice_config_from_media_config(NULL, &acc->cfg.ice_cfg,
-	                                &pjsua_var.media_cfg);
-	break;
-    case PJSUA_ICE_CONFIG_USE_CUSTOM:
-	pjsua_ice_config_dup(acc->pool, &acc->cfg.ice_cfg, &cfg->ice_cfg);
-	break;
-    }
-
-    /* TURN settings */
-    acc->cfg.turn_cfg_use = cfg->turn_cfg_use;
-    switch (acc->cfg.turn_cfg_use) {
-    case PJSUA_TURN_CONFIG_USE_DEFAULT:
-	/* Copy TURN settings from media settings so that we don't need to
-	 * check the media config if we look for TURN config.
-	 */
-	pjsua_turn_config_from_media_config(NULL, &acc->cfg.turn_cfg,
-	                                    &pjsua_var.media_cfg);
-	break;
-    case PJSUA_TURN_CONFIG_USE_CUSTOM:
-	pjsua_turn_config_dup(acc->pool, &acc->cfg.turn_cfg,
-	                      &cfg->turn_cfg);
-	break;
-    }
-
-    acc->cfg.use_srtp = cfg->use_srtp;
-
-    /* Call hold type */
-    acc->cfg.call_hold_type = cfg->call_hold_type;
-
     /* Unregister first */
     if (unreg_first) {
 	pjsua_acc_set_registration(acc->index, PJ_FALSE);
@@ -1250,16 +1101,18 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
 	/* If accounts has registration enabled, start registration */
 	if (acc->cfg.reg_uri.slen)
 	    pjsua_acc_set_registration(acc->index, PJ_TRUE);
+	else {
+	    /* Otherwise subscribe to MWI, if it's enabled */
+	    if (acc->cfg.mwi_enabled)
+		pjsua_start_mwi(acc);
+	}
     }
 
-    /* Update MWI subscription */
-    if (update_mwi) {
-	pjsua_start_mwi(acc_id, PJ_TRUE);
-    }
+    /* Call hold type */
+    acc->cfg.call_hold_type = cfg->call_hold_type;
 
 on_return:
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
     return status;
 }
 
@@ -1275,15 +1128,9 @@ PJ_DEF(pj_status_t) pjsua_acc_set_online_status( pjsua_acc_id acc_id,
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: setting online status to %d..",
-	      acc_id, is_online));
-    pj_log_push_indent();
-
     pjsua_var.acc[acc_id].online_status = is_online;
     pj_bzero(&pjsua_var.acc[acc_id].rpid, sizeof(pjrpid_element));
     pjsua_pres_update_acc(acc_id, PJ_FALSE);
-
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -1299,18 +1146,12 @@ PJ_DEF(pj_status_t) pjsua_acc_set_online_status2( pjsua_acc_id acc_id,
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: setting online status to %d..",
-    	      acc_id, is_online));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
     pjsua_var.acc[acc_id].online_status = is_online;
     pjrpid_element_dup(pjsua_var.acc[acc_id].pool, &pjsua_var.acc[acc_id].rpid, pr);
     PJSUA_UNLOCK();
 
     pjsua_pres_update_acc(acc_id, PJ_TRUE);
-    pj_log_pop_indent();
-
     return PJ_SUCCESS;
 }
 
@@ -1414,41 +1255,6 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 
     tp = param->rdata->tp_info.transport;
 
-    /* Get the received and rport info */
-    via = param->rdata->msg_info.via;
-    if (via->rport_param < 1) {
-	/* Remote doesn't support rport */
-	rport = via->sent_by.port;
-	if (rport==0) {
-	    pjsip_transport_type_e tp_type;
-	    tp_type = (pjsip_transport_type_e) tp->key.type;
-	    rport = pjsip_transport_get_default_port_for_type(tp_type);
-	}
-    } else
-	rport = via->rport_param;
-
-    if (via->recvd_param.slen != 0)
-        via_addr = &via->recvd_param;
-    else
-        via_addr = &via->sent_by.host;
-
-    /* If allow_via_rewrite is enabled, we save the Via "received" address
-     * from the response.
-     */
-    if (acc->cfg.allow_via_rewrite &&
-        (acc->via_addr.host.slen == 0 || acc->via_tp != tp))
-    {
-        if (pj_strcmp(&acc->via_addr.host, via_addr))
-            pj_strdup(acc->pool, &acc->via_addr.host, via_addr);
-        acc->via_addr.port = rport;
-        acc->via_tp = tp;
-        pjsip_regc_set_via_sent_by(acc->regc, &acc->via_addr, acc->via_tp);
-        if (acc->publish_sess != NULL) {
-                pjsip_publishc_set_via_sent_by(acc->publish_sess,
-                                               &acc->via_addr, acc->via_tp);
-        }
-    }
-
     /* Only update if account is configured to auto-update */
     if (acc->cfg.allow_contact_rewrite == PJ_FALSE)
 	return PJ_FALSE;
@@ -1478,6 +1284,24 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 	return PJ_FALSE;
     }
 #endif
+
+    /* Get the received and rport info */
+    via = param->rdata->msg_info.via;
+    if (via->rport_param < 1) {
+	/* Remote doesn't support rport */
+	rport = via->sent_by.port;
+	if (rport==0) {
+	    pjsip_transport_type_e tp_type;
+	    tp_type = (pjsip_transport_type_e) tp->key.type;
+	    rport = pjsip_transport_get_default_port_for_type(tp_type);
+	}
+    } else
+	rport = via->rport_param;
+
+    if (via->recvd_param.slen != 0)
+	via_addr = &via->recvd_param;
+    else
+	via_addr = &via->sent_by.host;
 
     /* Compare received and rport with the URI in our registration */
     pool = pjsua_pool_create("tmp", 512, 512);
@@ -1588,7 +1412,6 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 	const char *ob = ";ob";
 	char *tmp;
 	const char *beginquote, *endquote;
-	char transport_param[32];
 	int len;
 
 	/* Enclose IPv6 address in square brackets */
@@ -1599,21 +1422,9 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 	    beginquote = endquote = "";
 	}
 
-	/* Don't add transport parameter if it's UDP */
-	if (tp->key.type != PJSIP_TRANSPORT_UDP &&
-		tp->key.type != PJSIP_TRANSPORT_UDP6)
-	{
-	    pj_ansi_snprintf(transport_param, sizeof(transport_param),
-			     ";transport=%s",
-			     pjsip_transport_get_type_name(
-				     (pjsip_transport_type_e)tp->key.type));
-	} else {
-	    transport_param[0] = '\0';
-	}
-
 	tmp = (char*) pj_pool_alloc(pool, PJSIP_MAX_URL_SIZE);
 	len = pj_ansi_snprintf(tmp, PJSIP_MAX_URL_SIZE,
-			       "<sip:%.*s%s%s%.*s%s:%d%s%.*s%s>%.*s",
+			       "<sip:%.*s%s%s%.*s%s:%d;transport=%s%.*s%s>%.*s",
 			       (int)acc->user_part.slen,
 			       acc->user_part.ptr,
 			       (acc->user_part.slen? "@" : ""),
@@ -1622,7 +1433,7 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 			       via_addr->ptr,
 			       endquote,
 			       rport,
-			       transport_param,
+			       tp->type_name,
 			       (int)acc->cfg.contact_uri_params.slen,
 			       acc->cfg.contact_uri_params.ptr,
 			       (acc->cfg.use_rfc5626? ob: ""),
@@ -1638,14 +1449,8 @@ static pj_bool_t acc_check_nat_addr(pjsua_acc *acc,
 	update_regc_contact(acc);
 
 	/* Always update, by http://trac.pjsip.org/repos/ticket/864. */
-        /* Since the Via address will now be overwritten to the correct
-         * address by https://trac.pjsip.org/repos/ticket/1537, we do
-         * not need to update the transport address.
-         */
-        /*
 	pj_strdup_with_null(tp->pool, &tp->local_name.host, via_addr);
 	tp->local_name.port = rport;
-         */
 
     }
 
@@ -1957,11 +1762,9 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
     PJSUA_LOCK();
 
     if (param->regc != acc->regc) {
-        PJSUA_UNLOCK();
+	PJSUA_UNLOCK();
 	return;
     }
-
-    pj_log_push_indent();
 
     /*
      * Print registration status.
@@ -2012,7 +1815,6 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
 	    /* Check NAT bound address */
 	    if (acc_check_nat_addr(acc, param)) {
 		PJSUA_UNLOCK();
-		pj_log_pop_indent();
 		return;
 	    }
 
@@ -2036,7 +1838,7 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
 
 	    /* Subscribe to MWI, if it's enabled */
 	    if (acc->cfg.mwi_enabled)
-		pjsua_start_mwi(acc->index, PJ_FALSE);
+		pjsua_start_mwi(acc);
 	}
 
     } else {
@@ -2075,7 +1877,6 @@ static void regc_cb(struct pjsip_regc_cbparam *param)
     }
     
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
 }
 
 
@@ -2249,13 +2050,6 @@ static pj_status_t pjsua_regc_init(int acc_id)
     return PJ_SUCCESS;
 }
 
-pj_bool_t pjsua_sip_acc_is_using_stun(pjsua_acc_id acc_id)
-{
-    pjsua_acc *acc = &pjsua_var.acc[acc_id];
-
-    return acc->cfg.sip_stun_use != PJSUA_STUN_USE_DISABLED &&
-	    pjsua_var.ua_cfg.stun_srv_cnt != 0;
-}
 
 /*
  * Update registration or perform unregistration. 
@@ -2263,7 +2057,6 @@ pj_bool_t pjsua_sip_acc_is_using_stun(pjsua_acc_id acc_id)
 PJ_DEF(pj_status_t) pjsua_acc_set_registration( pjsua_acc_id acc_id, 
 						pj_bool_t renew)
 {
-    pjsua_acc *acc;
     pj_status_t status = 0;
     pjsip_tx_data *tdata = 0;
 
@@ -2271,19 +2064,10 @@ PJ_DEF(pj_status_t) pjsua_acc_set_registration( pjsua_acc_id acc_id,
 		     PJ_EINVAL);
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: setting %sregistration..",
-	      acc_id, (renew? "" : "un")));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
 
-    acc = &pjsua_var.acc[acc_id];
-
     /* Cancel any re-registration timer */
-    if (pjsua_var.acc[acc_id].auto_rereg.timer.id) {
-	pjsua_var.acc[acc_id].auto_rereg.timer.id = PJ_FALSE;
-	pjsua_cancel_timer(&pjsua_var.acc[acc_id].auto_rereg.timer);
-    }
+    pjsua_cancel_timer(&pjsua_var.acc[acc_id].auto_rereg.timer);
 
     /* Reset pointer to registration transport */
     pjsua_var.acc[acc_id].auto_rereg.reg_tp = NULL;
@@ -2339,23 +2123,6 @@ PJ_DEF(pj_status_t) pjsua_acc_set_registration( pjsua_acc_id acc_id,
     }
 
     if (status == PJ_SUCCESS) {
-        if (pjsua_var.acc[acc_id].cfg.allow_via_rewrite &&
-            pjsua_var.acc[acc_id].via_addr.host.slen > 0)
-        {
-            pjsip_regc_set_via_sent_by(pjsua_var.acc[acc_id].regc,
-                                       &pjsua_var.acc[acc_id].via_addr,
-                                       pjsua_var.acc[acc_id].via_tp);
-        } else if (!pjsua_sip_acc_is_using_stun(acc_id)) {
-            /* Choose local interface to use in Via if acc is not using
-             * STUN
-             */
-            pjsua_acc_get_uac_addr(acc_id, tdata->pool,
-	                           &acc->cfg.reg_uri,
-	                           &tdata->via_addr,
-	                           NULL, NULL,
-	                           &tdata->via_tp);
-        }
-
 	//pjsua_process_msg_data(tdata, NULL);
 	status = pjsip_regc_send( pjsua_var.acc[acc_id].regc, tdata );
     }
@@ -2376,13 +2143,12 @@ PJ_DEF(pj_status_t) pjsua_acc_set_registration( pjsua_acc_id acc_id,
 	pjsua_perror(THIS_FILE, "Unable to create/send REGISTER", 
 		     status);
     } else {
-	PJ_LOG(4,(THIS_FILE, "Acc %d: %s sent", acc_id,
+	PJ_LOG(3,(THIS_FILE, "%s sent",
 	         (renew? "Registration" : "Unregistration")));
     }
 
 on_return:
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
     return status;
 }
 
@@ -2721,62 +2487,51 @@ PJ_DEF(pj_status_t) pjsua_acc_create_request(pjsua_acc_id acc_id,
 	pjsip_tx_data_set_transport(tdata, &tp_sel);
     }
 
-    /* If via_addr is set, use this address for the Via header. */
-    if (pjsua_var.acc[acc_id].cfg.allow_via_rewrite &&
-        pjsua_var.acc[acc_id].via_addr.host.slen > 0)
-    {
-        tdata->via_addr = pjsua_var.acc[acc_id].via_addr;
-        tdata->via_tp = pjsua_var.acc[acc_id].via_tp;
-    } else if (!pjsua_sip_acc_is_using_stun(acc_id)) {
-        /* Choose local interface to use in Via if acc is not using
-         * STUN
-         */
-        pjsua_acc_get_uac_addr(acc_id, tdata->pool,
-	                       target,
-	                       &tdata->via_addr,
-	                       NULL, NULL,
-	                       &tdata->via_tp);
-    }
-
     /* Done */
     *p_tdata = tdata;
     return PJ_SUCCESS;
 }
 
-/* Get local transport address suitable to be used for Via or Contact address
- * to send request to the specified destination URI.
- */
-pj_status_t pjsua_acc_get_uac_addr(pjsua_acc_id acc_id,
-				   pj_pool_t *pool,
-				   const pj_str_t *dst_uri,
-				   pjsip_host_port *addr,
-				   pjsip_transport_type_e *p_tp_type,
-				   int *secure,
-				   const void **p_tp)
+
+PJ_DEF(pj_status_t) pjsua_acc_create_uac_contact( pj_pool_t *pool,
+						  pj_str_t *contact,
+						  pjsua_acc_id acc_id,
+						  const pj_str_t *suri)
 {
     pjsua_acc *acc;
     pjsip_sip_uri *sip_uri;
     pj_status_t status;
     pjsip_transport_type_e tp_type = PJSIP_TRANSPORT_UNSPECIFIED;
-    unsigned flag;
+    pj_str_t local_addr;
     pjsip_tpselector tp_sel;
-    pjsip_tpmgr *tpmgr;
-    pjsip_tpmgr_fla2_param tfla2_prm;
+    unsigned flag;
+    int secure;
+    int local_port;
+    const char *beginquote, *endquote;
+    char transport_param[32];
+    const char *ob = ";ob";
 
+    
     PJ_ASSERT_RETURN(pjsua_acc_is_valid(acc_id), PJ_EINVAL);
     acc = &pjsua_var.acc[acc_id];
 
-    /* If route-set is configured for the account, then URI is the
+    /* If force_contact is configured, then use use it */
+    if (acc->cfg.force_contact.slen) {
+	*contact = acc->cfg.force_contact;
+	return PJ_SUCCESS;
+    }
+
+    /* If route-set is configured for the account, then URI is the 
      * first entry of the route-set.
      */
     if (!pj_list_empty(&acc->route_set)) {
-	sip_uri = (pjsip_sip_uri*)
+	sip_uri = (pjsip_sip_uri*) 
 		  pjsip_uri_get_uri(acc->route_set.next->name_addr.uri);
     } else {
 	pj_str_t tmp;
 	pjsip_uri *uri;
 
-	pj_strdup_with_null(pool, &tmp, dst_uri);
+	pj_strdup_with_null(pool, &tmp, suri);
 
 	uri = pjsip_parse_uri(pool, tmp.ptr, tmp.slen, 0);
 	if (uri == NULL)
@@ -2796,7 +2551,7 @@ pj_status_t pjsua_acc_get_uac_addr(pjsua_acc_id acc_id,
 	tp_type = PJSIP_TRANSPORT_UDP;
     } else
 	tp_type = pjsip_transport_get_type_from_name(&sip_uri->transport_param);
-
+    
     if (tp_type == PJSIP_TRANSPORT_UNSPECIFIED)
 	return PJSIP_EUNSUPTRANSPORT;
 
@@ -2807,66 +2562,15 @@ pj_status_t pjsua_acc_get_uac_addr(pjsua_acc_id acc_id,
 	tp_type = (pjsip_transport_type_e)(((int)tp_type) + PJSIP_TRANSPORT_IPV6);
 
     flag = pjsip_transport_get_flag_from_type(tp_type);
+    secure = (flag & PJSIP_TRANSPORT_SECURE) != 0;
 
     /* Init transport selector. */
-    pjsua_init_tpselector(acc->cfg.transport_id, &tp_sel);
+    pjsua_init_tpselector(pjsua_var.acc[acc_id].cfg.transport_id, &tp_sel);
 
     /* Get local address suitable to send request from */
-    pjsip_tpmgr_fla2_param_default(&tfla2_prm);
-    tfla2_prm.tp_type = tp_type;
-    tfla2_prm.tp_sel = &tp_sel;
-    tfla2_prm.dst_host = sip_uri->host;
-    tfla2_prm.local_if = (!pjsua_sip_acc_is_using_stun(acc_id) ||
-	                  (flag & PJSIP_TRANSPORT_RELIABLE));
-
-    tpmgr = pjsip_endpt_get_tpmgr(pjsua_var.endpt);
-    status = pjsip_tpmgr_find_local_addr2(tpmgr, pool, &tfla2_prm);
-    if (status != PJ_SUCCESS)
-	return status;
-
-    addr->host = tfla2_prm.ret_addr;
-    addr->port = tfla2_prm.ret_port;
-
-    if (p_tp_type)
-	*p_tp_type = tp_type;
-
-    if (secure) {
-	*secure = (flag & PJSIP_TRANSPORT_SECURE) != 0;
-    }
-
-    if (p_tp)
-	*p_tp = tfla2_prm.ret_tp;
-
-    return PJ_SUCCESS;
-}
-
-
-PJ_DEF(pj_status_t) pjsua_acc_create_uac_contact( pj_pool_t *pool,
-						  pj_str_t *contact,
-						  pjsua_acc_id acc_id,
-						  const pj_str_t *suri)
-{
-    pjsua_acc *acc;
-    pj_status_t status;
-    pjsip_transport_type_e tp_type;
-    pjsip_host_port addr;
-    int secure;
-    const char *beginquote, *endquote;
-    char transport_param[32];
-    const char *ob = ";ob";
-
-    
-    PJ_ASSERT_RETURN(pjsua_acc_is_valid(acc_id), PJ_EINVAL);
-    acc = &pjsua_var.acc[acc_id];
-
-    /* If force_contact is configured, then use use it */
-    if (acc->cfg.force_contact.slen) {
-	*contact = acc->cfg.force_contact;
-	return PJ_SUCCESS;
-    }
-
-    status = pjsua_acc_get_uac_addr(acc_id, pool, suri, &addr,
-                                    &tp_type, &secure, NULL);
+    status = pjsip_tpmgr_find_local_addr(pjsip_endpt_get_tpmgr(pjsua_var.endpt),
+					 pool, tp_type, &tp_sel, 
+					 &local_addr, &local_port);
     if (status != PJ_SUCCESS)
 	return status;
 
@@ -2901,10 +2605,10 @@ PJ_DEF(pj_status_t) pjsua_acc_create_uac_contact( pj_pool_t *pool,
 				     acc->user_part.ptr,
 				     (acc->user_part.slen?"@":""),
 				     beginquote,
-				     (int)addr.host.slen,
-				     addr.host.ptr,
+				     (int)local_addr.slen,
+				     local_addr.ptr,
 				     endquote,
-				     addr.port,
+				     local_port,
 				     transport_param,
 				     (int)acc->cfg.contact_uri_params.slen,
 				     acc->cfg.contact_uri_params.ptr,
@@ -2936,8 +2640,6 @@ PJ_DEF(pj_status_t) pjsua_acc_create_uas_contact( pj_pool_t *pool,
     pjsip_transport_type_e tp_type = PJSIP_TRANSPORT_UNSPECIFIED;
     pj_str_t local_addr;
     pjsip_tpselector tp_sel;
-    pjsip_tpmgr *tpmgr;
-    pjsip_tpmgr_fla2_param tfla2_prm;
     unsigned flag;
     int secure;
     int local_port;
@@ -3025,21 +2727,11 @@ PJ_DEF(pj_status_t) pjsua_acc_create_uas_contact( pj_pool_t *pool,
     pjsua_init_tpselector(pjsua_var.acc[acc_id].cfg.transport_id, &tp_sel);
 
     /* Get local address suitable to send request from */
-    pjsip_tpmgr_fla2_param_default(&tfla2_prm);
-    tfla2_prm.tp_type = tp_type;
-    tfla2_prm.tp_sel = &tp_sel;
-    tfla2_prm.dst_host = sip_uri->host;
-    tfla2_prm.local_if = (!pjsua_sip_acc_is_using_stun(acc_id) ||
-	                  (flag & PJSIP_TRANSPORT_RELIABLE));
-
-    tpmgr = pjsip_endpt_get_tpmgr(pjsua_var.endpt);
-    status = pjsip_tpmgr_find_local_addr2(tpmgr, pool, &tfla2_prm);
+    status = pjsip_tpmgr_find_local_addr(pjsip_endpt_get_tpmgr(pjsua_var.endpt),
+					 pool, tp_type, &tp_sel,
+					 &local_addr, &local_port);
     if (status != PJ_SUCCESS)
 	return status;
-
-    local_addr = tfla2_prm.ret_addr;
-    local_port = tfla2_prm.ret_port;
-
 
     /* Enclose IPv6 address in square brackets */
     if (tp_type & PJSIP_TRANSPORT_IPV6) {
@@ -3173,10 +2865,7 @@ static void schedule_reregistration(pjsua_acc *acc)
     }
 
     /* Cancel any re-registration timer */
-    if (acc->auto_rereg.timer.id) {
-	acc->auto_rereg.timer.id = PJ_FALSE;
-	pjsua_cancel_timer(&acc->auto_rereg.timer);
-    }
+    pjsua_cancel_timer(&acc->auto_rereg.timer);
 
     /* Update re-registration flag */
     acc->auto_rereg.active = PJ_TRUE;
@@ -3203,9 +2892,7 @@ static void schedule_reregistration(pjsua_acc *acc)
 	      "Scheduling re-registration retry for acc %d in %u seconds..",
 	      acc->index, delay.sec));
 
-    acc->auto_rereg.timer.id = PJ_TRUE;
-    if (pjsua_schedule_timer(&acc->auto_rereg.timer, &delay) != PJ_SUCCESS)
-	acc->auto_rereg.timer.id = PJ_FALSE;
+    pjsua_schedule_timer(&acc->auto_rereg.timer, &delay);
 }
 
 
@@ -3223,10 +2910,6 @@ void pjsua_acc_on_tp_state_changed(pjsip_transport *tp,
     /* Only care for transport disconnection events */
     if (state != PJSIP_TP_STATE_DISCONNECTED)
 	return;
-
-    PJ_LOG(4,(THIS_FILE, "Disconnected notification for transport %s",
-	      tp->obj_name));
-    pj_log_push_indent();
 
     /* Shutdown this transport, to make sure that the transport manager 
      * will create a new transport for reconnection.
@@ -3262,5 +2945,4 @@ void pjsua_acc_on_tp_state_changed(pjsip_transport *tp,
     }
 
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
 }

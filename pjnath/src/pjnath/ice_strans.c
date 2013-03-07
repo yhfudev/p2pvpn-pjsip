@@ -31,9 +31,8 @@
 #include <pj/string.h>
 #include <pj/compat/socket.h>
 
-#define ENABLE_TRACE 0
 
-#if defined(ENABLE_TRACE) && (ENABLE_TRACE != 0)
+#if 0
 #  define TRACE_PKT(expr)	    PJ_LOG(5,expr)
 #else
 #  define TRACE_PKT(expr)
@@ -127,10 +126,12 @@ static void turn_on_state(pj_turn_sock *turn_sock, pj_turn_state_t old_state,
 
 
 /* Forward decls */
-static void ice_st_on_destroy(void *obj);
 static void destroy_ice_st(pj_ice_strans *ice_st);
 #define ice_st_perror(ice_st,msg,rc) pjnath_perror(ice_st->obj_name,msg,rc)
 static void sess_init_update(pj_ice_strans *ice_st);
+
+static void sess_add_ref(pj_ice_strans *ice_st);
+static pj_bool_t sess_dec_ref(pj_ice_strans *ice_st);
 
 /**
  * This structure describes an ICE stream transport component. A component
@@ -171,7 +172,7 @@ struct pj_ice_strans
     void		    *user_data;	/**< Application data.		*/
     pj_ice_strans_cfg	     cfg;	/**< Configuration.		*/
     pj_ice_strans_cb	     cb;	/**< Application callback.	*/
-    pj_grp_lock_t	    *grp_lock;  /**< Group lock.		*/
+    pj_lock_t		    *init_lock; /**< Initialization mutex.	*/
 
     pj_ice_strans_state	     state;	/**< Session state.		*/
     pj_ice_sess		    *ice;	/**< ICE session.		*/
@@ -182,6 +183,7 @@ struct pj_ice_strans
 
     pj_timer_entry	     ka_timer;	/**< STUN keep-alive timer.	*/
 
+    pj_atomic_t		    *busy_cnt;	/**< To prevent destroy		*/
     pj_bool_t		     destroy_req;/**< Destroy has been called?	*/
     pj_bool_t		     cb_called;	/**< Init error callback called?*/
 };
@@ -219,7 +221,6 @@ PJ_DEF(void) pj_ice_strans_cfg_default(pj_ice_strans_cfg *cfg)
     cfg->turn.conn_type = PJ_TURN_TP_UDP;
 
     cfg->stun.max_host_cands = 64;
-    cfg->stun.ignore_stun_error = PJ_FALSE;
 }
 
 
@@ -404,8 +405,6 @@ static pj_status_t create_comp(pj_ice_strans *ice_st, unsigned comp_id)
 		      "Comp %d: srflx candidate starts Binding discovery",
 		      comp_id));
 
-	    pj_log_push_indent();
-
 	    /* Start Binding resolution */
 	    status = pj_stun_sock_start(comp->stun_sock, 
 					&ice_st->cfg.stun.server,
@@ -413,7 +412,6 @@ static pj_status_t create_comp(pj_ice_strans *ice_st, unsigned comp_id)
 					ice_st->cfg.resolver);
 	    if (status != PJ_SUCCESS) {
 		///sess_dec_ref(ice_st);
-		pj_log_pop_indent();
 		return status;
 	    }
 
@@ -421,7 +419,6 @@ static pj_status_t create_comp(pj_ice_strans *ice_st, unsigned comp_id)
 	    status = pj_stun_sock_get_info(comp->stun_sock, &stun_sock_info);
 	    if (status != PJ_SUCCESS) {
 		///sess_dec_ref(ice_st);
-		pj_log_pop_indent();
 		return status;
 	    }
 
@@ -440,7 +437,6 @@ static pj_status_t create_comp(pj_ice_strans *ice_st, unsigned comp_id)
 	    /* Set default candidate to srflx */
 	    comp->default_cand = cand - comp->cand_list;
 
-	    pj_log_pop_indent();
 	}
 
 	/* Add local addresses to host candidates, unless max_host_cands
@@ -501,13 +497,6 @@ static pj_status_t create_comp(pj_ice_strans *ice_st, unsigned comp_id)
 	add_update_turn(ice_st, comp);
     }
 
-    /* It's possible that we end up without any candidates */
-    if (comp->cand_cnt == 0) {
-	PJ_LOG(4,(ice_st->obj_name,
-		  "Error: no candidate is created due to settings"));
-	return PJ_EINVAL;
-    }
-
     return PJ_SUCCESS;
 }
 
@@ -547,23 +536,22 @@ PJ_DEF(pj_status_t) pj_ice_strans_create( const char *name,
     PJ_LOG(4,(ice_st->obj_name, 
 	      "Creating ICE stream transport with %d component(s)",
 	      comp_cnt));
-    pj_log_push_indent();
 
-    status = pj_grp_lock_create(pool, NULL, &ice_st->grp_lock);
+    pj_ice_strans_cfg_copy(pool, &ice_st->cfg, cfg);
+    pj_memcpy(&ice_st->cb, cb, sizeof(*cb));
+    
+    status = pj_atomic_create(pool, 0, &ice_st->busy_cnt);
     if (status != PJ_SUCCESS) {
-	pj_pool_release(pool);
-	pj_log_pop_indent();
+	destroy_ice_st(ice_st);
 	return status;
     }
 
-    pj_grp_lock_add_ref(ice_st->grp_lock);
-    pj_grp_lock_add_handler(ice_st->grp_lock, pool, ice_st,
-			    &ice_st_on_destroy);
-
-    pj_ice_strans_cfg_copy(pool, &ice_st->cfg, cfg);
-    ice_st->cfg.stun.cfg.grp_lock = ice_st->grp_lock;
-    ice_st->cfg.turn.cfg.grp_lock = ice_st->grp_lock;
-    pj_memcpy(&ice_st->cb, cb, sizeof(*cb));
+    status = pj_lock_create_recursive_mutex(pool, ice_st->obj_name, 
+					    &ice_st->init_lock);
+    if (status != PJ_SUCCESS) {
+	destroy_ice_st(ice_st);
+	return status;
+    }
 
     ice_st->comp_cnt = comp_cnt;
     ice_st->comp = (pj_ice_strans_comp**) 
@@ -575,61 +563,33 @@ PJ_DEF(pj_status_t) pj_ice_strans_create( const char *name,
     /* Acquire initialization mutex to prevent callback to be 
      * called before we finish initialization.
      */
-    pj_grp_lock_acquire(ice_st->grp_lock);
+    pj_lock_acquire(ice_st->init_lock);
 
     for (i=0; i<comp_cnt; ++i) {
 	status = create_comp(ice_st, i+1);
 	if (status != PJ_SUCCESS) {
-	    pj_grp_lock_release(ice_st->grp_lock);
+	    pj_lock_release(ice_st->init_lock);
 	    destroy_ice_st(ice_st);
-	    pj_log_pop_indent();
 	    return status;
 	}
     }
 
     /* Done with initialization */
-    pj_grp_lock_release(ice_st->grp_lock);
-
-    PJ_LOG(4,(ice_st->obj_name, "ICE stream transport %p created", ice_st));
-
-    *p_ice_st = ice_st;
+    pj_lock_release(ice_st->init_lock);
 
     /* Check if all candidates are ready (this may call callback) */
     sess_init_update(ice_st);
 
-    pj_log_pop_indent();
+    PJ_LOG(4,(ice_st->obj_name, "ICE stream transport created"));
 
+    *p_ice_st = ice_st;
     return PJ_SUCCESS;
-}
-
-/* REALLY destroy ICE */
-static void ice_st_on_destroy(void *obj)
-{
-    pj_ice_strans *ice_st = (pj_ice_strans*)obj;
-
-    PJ_LOG(4,(ice_st->obj_name, "ICE stream transport %p destroyed", obj));
-
-    /* Done */
-    pj_pool_release(ice_st->pool);
 }
 
 /* Destroy ICE */
 static void destroy_ice_st(pj_ice_strans *ice_st)
 {
     unsigned i;
-
-    PJ_LOG(5,(ice_st->obj_name, "ICE stream transport %p destroy request..",
-	      ice_st));
-    pj_log_push_indent();
-
-    pj_grp_lock_acquire(ice_st->grp_lock);
-
-    if (ice_st->destroy_req) {
-	pj_grp_lock_release(ice_st->grp_lock);
-	return;
-    }
-
-    ice_st->destroy_req = PJ_TRUE;
 
     /* Destroy ICE if we have ICE */
     if (ice_st->ice) {
@@ -641,20 +601,36 @@ static void destroy_ice_st(pj_ice_strans *ice_st)
     for (i=0; i<ice_st->comp_cnt; ++i) {
 	if (ice_st->comp[i]) {
 	    if (ice_st->comp[i]->stun_sock) {
+		pj_stun_sock_set_user_data(ice_st->comp[i]->stun_sock, NULL);
 		pj_stun_sock_destroy(ice_st->comp[i]->stun_sock);
 		ice_st->comp[i]->stun_sock = NULL;
 	    }
 	    if (ice_st->comp[i]->turn_sock) {
+		pj_turn_sock_set_user_data(ice_st->comp[i]->turn_sock, NULL);
 		pj_turn_sock_destroy(ice_st->comp[i]->turn_sock);
 		ice_st->comp[i]->turn_sock = NULL;
 	    }
 	}
     }
+    ice_st->comp_cnt = 0;
 
-    pj_grp_lock_dec_ref(ice_st->grp_lock);
-    pj_grp_lock_release(ice_st->grp_lock);
+    /* Destroy mutex */
+    if (ice_st->init_lock) {
+	pj_lock_acquire(ice_st->init_lock);
+	pj_lock_release(ice_st->init_lock);
+	pj_lock_destroy(ice_st->init_lock);
+	ice_st->init_lock = NULL;
+    }
 
-    pj_log_pop_indent();
+    /* Destroy reference counter */
+    if (ice_st->busy_cnt) {
+	pj_assert(pj_atomic_get(ice_st->busy_cnt)==0);
+	pj_atomic_destroy(ice_st->busy_cnt);
+	ice_st->busy_cnt = NULL;
+    }
+
+    /* Done */
+    pj_pool_release(ice_st->pool);
 }
 
 /* Get ICE session state. */
@@ -688,19 +664,14 @@ static void sess_fail(pj_ice_strans *ice_st, pj_ice_strans_op op,
 
     pj_strerror(status, errmsg, sizeof(errmsg));
     PJ_LOG(4,(ice_st->obj_name, "%s: %s", title, errmsg));
-    pj_log_push_indent();
 
-    if (op==PJ_ICE_STRANS_OP_INIT && ice_st->cb_called) {
-	pj_log_pop_indent();
+    if (op==PJ_ICE_STRANS_OP_INIT && ice_st->cb_called)
 	return;
-    }
 
     ice_st->cb_called = PJ_TRUE;
 
     if (ice_st->cb.on_ice_complete)
 	(*ice_st->cb.on_ice_complete)(ice_st, op, status);
-
-    pj_log_pop_indent();
 }
 
 /* Update initialization status */
@@ -738,10 +709,41 @@ static void sess_init_update(pj_ice_strans *ice_st)
  */
 PJ_DEF(pj_status_t) pj_ice_strans_destroy(pj_ice_strans *ice_st)
 {
-    destroy_ice_st(ice_st);
+    PJ_ASSERT_RETURN(ice_st, PJ_EINVAL);
+    sess_add_ref(ice_st);
+    ice_st->destroy_req = PJ_TRUE;
+    if (sess_dec_ref(ice_st)) {
+	PJ_LOG(5,(ice_st->obj_name, 
+		  "ICE strans object is busy, will destroy later"));
+	return PJ_EPENDING;
+    }
     return PJ_SUCCESS;
 }
 
+
+/*
+ * Increment busy counter.
+ */
+static void sess_add_ref(pj_ice_strans *ice_st)
+{
+    pj_atomic_inc(ice_st->busy_cnt);
+}
+
+/*
+ * Decrement busy counter. If the counter has reached zero and destroy
+ * has been requested, destroy the object and return FALSE.
+ */
+static pj_bool_t sess_dec_ref(pj_ice_strans *ice_st)
+{
+    int count = pj_atomic_dec_and_get(ice_st->busy_cnt);
+    pj_assert(count >= 0);
+    if (count==0 && ice_st->destroy_req) {
+	destroy_ice_st(ice_st);
+	return PJ_FALSE;
+    } else {
+	return PJ_TRUE;
+    }
+}
 
 /*
  * Get user data
@@ -806,9 +808,7 @@ PJ_DEF(pj_status_t) pj_ice_strans_init_ice(pj_ice_strans *ice_st,
     /* Create! */
     status = pj_ice_sess_create(&ice_st->cfg.stun_cfg, ice_st->obj_name, role,
 			        ice_st->comp_cnt, &ice_cb, 
-			        local_ufrag, local_passwd,
-			        ice_st->grp_lock,
-			        &ice_st->ice);
+			        local_ufrag, local_passwd, &ice_st->ice);
     if (status != PJ_SUCCESS)
 	return status;
 
@@ -1223,7 +1223,7 @@ static void on_ice_complete(pj_ice_sess *ice, pj_status_t status)
     pj_time_val t;
     unsigned msec;
 
-    pj_grp_lock_add_ref(ice_st->grp_lock);
+    sess_add_ref(ice_st);
 
     pj_gettimeofday(&t);
     PJ_TIME_VAL_SUB(t, ice_st->start_time);
@@ -1298,14 +1298,13 @@ static void on_ice_complete(pj_ice_sess *ice, pj_status_t status)
 	ice_st->state = (status==PJ_SUCCESS) ? PJ_ICE_STRANS_STATE_RUNNING :
 					       PJ_ICE_STRANS_STATE_FAILED;
 
-	pj_log_push_indent();
 	(*ice_st->cb.on_ice_complete)(ice_st, PJ_ICE_STRANS_OP_NEGOTIATION, 
 				      status);
-	pj_log_pop_indent();
+
 	
     }
 
-    pj_grp_lock_dec_ref(ice_st->grp_lock);
+    sess_dec_ref(ice_st);
 }
 
 /*
@@ -1321,20 +1320,17 @@ static pj_status_t ice_tx_pkt(pj_ice_sess *ice,
     pj_ice_strans *ice_st = (pj_ice_strans*)ice->user_data;
     pj_ice_strans_comp *comp;
     pj_status_t status;
-#if defined(ENABLE_TRACE) && (ENABLE_TRACE != 0)
-    char daddr[PJ_INET6_ADDRSTRLEN];
-#endif
 
     PJ_ASSERT_RETURN(comp_id && comp_id <= ice_st->comp_cnt, PJ_EINVAL);
 
     comp = ice_st->comp[comp_id-1];
 
     TRACE_PKT((comp->ice_st->obj_name, 
-	       "Component %d TX packet to %s:%d with transport %d",
-	       comp_id, 
-	       pj_sockaddr_print(dst_addr, daddr, sizeof(addr), 0),
-	       pj_sockaddr_get_port(dst_addr),
-	       transport_id));
+	      "Component %d TX packet to %s:%d with transport %d",
+	      comp_id, 
+	      pj_inet_ntoa(((pj_sockaddr_in*)dst_addr)->sin_addr),
+	      (int)pj_ntohs(((pj_sockaddr_in*)dst_addr)->sin_port),
+	      transport_id));
 
     if (transport_id == TP_TURN) {
 	if (comp->turn_sock) {
@@ -1397,7 +1393,7 @@ static pj_bool_t stun_on_rx_data(pj_stun_sock *stun_sock,
 
     ice_st = comp->ice_st;
 
-    pj_grp_lock_add_ref(ice_st->grp_lock);
+    sess_add_ref(ice_st);
 
     if (ice_st->ice == NULL) {
 	/* The ICE session is gone, but we're still receiving packets.
@@ -1422,7 +1418,7 @@ static pj_bool_t stun_on_rx_data(pj_stun_sock *stun_sock,
 	}
     }
 
-    return pj_grp_lock_dec_ref(ice_st->grp_lock) ? PJ_FALSE : PJ_TRUE;
+    return sess_dec_ref(ice_st);
 }
 
 /* Notifification when asynchronous send operation to the STUN socket
@@ -1453,10 +1449,10 @@ static pj_bool_t stun_on_status(pj_stun_sock *stun_sock,
     comp = (pj_ice_strans_comp*) pj_stun_sock_get_user_data(stun_sock);
     ice_st = comp->ice_st;
 
-    pj_grp_lock_add_ref(ice_st->grp_lock);
+    sess_add_ref(ice_st);
 
     /* Wait until initialization completes */
-    pj_grp_lock_acquire(ice_st->grp_lock);
+    pj_lock_acquire(ice_st->init_lock);
 
     /* Find the srflx cancidate */
     for (i=0; i<comp->cand_cnt; ++i) {
@@ -1466,14 +1462,14 @@ static pj_bool_t stun_on_status(pj_stun_sock *stun_sock,
 	}
     }
 
-    pj_grp_lock_release(ice_st->grp_lock);
+    pj_lock_release(ice_st->init_lock);
 
     /* It is possible that we don't have srflx candidate even though this
      * callback is called. This could happen when we cancel adding srflx
      * candidate due to initialization error.
      */
     if (cand == NULL) {
-	return pj_grp_lock_dec_ref(ice_st->grp_lock) ? PJ_FALSE : PJ_TRUE;
+	return sess_dec_ref(ice_st);
     }
 
     switch (op) {
@@ -1482,14 +1478,8 @@ static pj_bool_t stun_on_status(pj_stun_sock *stun_sock,
 	    /* May not have cand, e.g. when error during init */
 	    if (cand)
 		cand->status = status;
-	    if (!ice_st->cfg.stun.ignore_stun_error) {
-		sess_fail(ice_st, PJ_ICE_STRANS_OP_INIT,
-		          "DNS resolution failed", status);
-	    } else {
-		PJ_LOG(4,(ice_st->obj_name,
-			  "STUN error is ignored for comp %d",
-			  comp->comp_id));
-	    }
+	    sess_fail(ice_st, PJ_ICE_STRANS_OP_INIT, "DNS resolution failed", 
+		      status);
 	}
 	break;
     case PJ_STUN_SOCK_BINDING_OP:
@@ -1554,42 +1544,21 @@ static pj_bool_t stun_on_status(pj_stun_sock *stun_sock,
 	    /* May not have cand, e.g. when error during init */
 	    if (cand)
 		cand->status = status;
-	    if (!ice_st->cfg.stun.ignore_stun_error || comp->cand_cnt==1) {
-		sess_fail(ice_st, PJ_ICE_STRANS_OP_INIT,
-			  "STUN binding request failed", status);
-	    } else {
-		PJ_LOG(4,(ice_st->obj_name,
-			  "STUN error is ignored for comp %d",
-			  comp->comp_id));
-
-		if (cand) {
-		    unsigned idx = cand - comp->cand_list;
-
-		    /* Update default candidate index */
-		    if (comp->default_cand == idx) {
-			comp->default_cand = !idx;
-		    }
-		}
-
-		sess_init_update(ice_st);
-	    }
+	    sess_fail(ice_st, PJ_ICE_STRANS_OP_INIT, 
+		      "STUN binding request failed", status);
 	}
 	break;
     case PJ_STUN_SOCK_KEEP_ALIVE_OP:
 	if (status != PJ_SUCCESS) {
 	    pj_assert(cand != NULL);
 	    cand->status = status;
-	    if (!ice_st->cfg.stun.ignore_stun_error) {
-		sess_fail(ice_st, PJ_ICE_STRANS_OP_INIT,
-			  "STUN keep-alive failed", status);
-	    } else {
-		PJ_LOG(4,(ice_st->obj_name, "STUN error is ignored"));
-	    }
+	    sess_fail(ice_st, PJ_ICE_STRANS_OP_INIT, 
+		      "STUN keep-alive failed", status);
 	}
 	break;
     }
 
-    return pj_grp_lock_dec_ref(ice_st->grp_lock)? PJ_FALSE : PJ_TRUE;
+    return sess_dec_ref(ice_st);
 }
 
 /* Callback when TURN socket has received a packet */
@@ -1608,7 +1577,7 @@ static void turn_on_rx_data(pj_turn_sock *turn_sock,
 	return;
     }
 
-    pj_grp_lock_add_ref(comp->ice_st->grp_lock);
+    sess_add_ref(comp->ice_st);
 
     if (comp->ice_st->ice == NULL) {
 	/* The ICE session is gone, but we're still receiving packets.
@@ -1635,7 +1604,7 @@ static void turn_on_rx_data(pj_turn_sock *turn_sock,
 	}
     }
 
-    pj_grp_lock_dec_ref(comp->ice_st->grp_lock);
+    sess_dec_ref(comp->ice_st);
 }
 
 
@@ -1655,9 +1624,8 @@ static void turn_on_state(pj_turn_sock *turn_sock, pj_turn_state_t old_state,
 
     PJ_LOG(5,(comp->ice_st->obj_name, "TURN client state changed %s --> %s",
 	      pj_turn_state_name(old_state), pj_turn_state_name(new_state)));
-    pj_log_push_indent();
 
-    pj_grp_lock_add_ref(comp->ice_st->grp_lock);
+    sess_add_ref(comp->ice_st);
 
     if (new_state == PJ_TURN_STATE_READY) {
 	pj_turn_session_info rel_info;
@@ -1671,7 +1639,7 @@ static void turn_on_state(pj_turn_sock *turn_sock, pj_turn_state_t old_state,
 	pj_turn_sock_get_info(turn_sock, &rel_info);
 
 	/* Wait until initialization completes */
-	pj_grp_lock_acquire(comp->ice_st->grp_lock);
+	pj_lock_acquire(comp->ice_st->init_lock);
 
 	/* Find relayed candidate in the component */
 	for (i=0; i<comp->cand_cnt; ++i) {
@@ -1682,7 +1650,7 @@ static void turn_on_state(pj_turn_sock *turn_sock, pj_turn_state_t old_state,
 	}
 	pj_assert(cand != NULL);
 
-	pj_grp_lock_release(comp->ice_st->grp_lock);
+	pj_lock_release(comp->ice_st->init_lock);
 
 	/* Update candidate */
 	pj_sockaddr_cp(&cand->addr, &rel_info.relay_addr);
@@ -1715,28 +1683,21 @@ static void turn_on_state(pj_turn_sock *turn_sock, pj_turn_state_t old_state,
 	pj_turn_sock_set_user_data(turn_sock, NULL);
 	comp->turn_sock = NULL;
 
-	/* Set session to fail on error. last_status PJ_SUCCESS means normal
-	 * deallocation, which should not trigger sess_fail as it may have
-	 * been initiated by ICE destroy
-	 */
-	if (info.last_status != PJ_SUCCESS) {
-	    if (comp->ice_st->state < PJ_ICE_STRANS_STATE_READY) {
-		sess_fail(comp->ice_st, PJ_ICE_STRANS_OP_INIT,
-			  "TURN allocation failed", info.last_status);
-	    } else if (comp->turn_err_cnt > 1) {
-		sess_fail(comp->ice_st, PJ_ICE_STRANS_OP_KEEP_ALIVE,
-			  "TURN refresh failed", info.last_status);
-	    } else {
-		PJ_PERROR(4,(comp->ice_st->obj_name, info.last_status,
-			  "Comp %d: TURN allocation failed, retrying",
-			  comp->comp_id));
-		add_update_turn(comp->ice_st, comp);
-	    }
+	/* Set session to fail if we're still initializing */
+	if (comp->ice_st->state < PJ_ICE_STRANS_STATE_READY) {
+	    sess_fail(comp->ice_st, PJ_ICE_STRANS_OP_INIT,
+		      "TURN allocation failed", info.last_status);
+	} else if (comp->turn_err_cnt > 1) {
+	    sess_fail(comp->ice_st, PJ_ICE_STRANS_OP_KEEP_ALIVE,
+		      "TURN refresh failed", info.last_status);
+	} else {
+	    PJ_PERROR(4,(comp->ice_st->obj_name, info.last_status,
+		      "Comp %d: TURN allocation failed, retrying",
+		      comp->comp_id));
+	    add_update_turn(comp->ice_st, comp);
 	}
     }
 
-    pj_grp_lock_dec_ref(comp->ice_st->grp_lock);
-
-    pj_log_pop_indent();
+    sess_dec_ref(comp->ice_st);
 }
 

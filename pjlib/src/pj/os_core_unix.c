@@ -97,18 +97,7 @@ struct pj_sem_t
 #if defined(PJ_HAS_EVENT_OBJ) && PJ_HAS_EVENT_OBJ != 0
 struct pj_event_t
 {
-    enum event_state {
-	EV_STATE_OFF,
-	EV_STATE_SET,
-	EV_STATE_PULSED
-    } state;
-
-    pj_mutex_t		mutex;
-    pthread_cond_t	cond;
-
-    pj_bool_t		auto_reset;
-    unsigned		threads_waiting;
-    unsigned		threads_to_release;
+    char		obj_name[PJ_MAX_OBJ_NAME];
 };
 #endif	/* PJ_HAS_EVENT_OBJ */
 
@@ -1711,48 +1700,13 @@ PJ_DEF(pj_status_t) pj_event_create(pj_pool_t *pool, const char *name,
 				    pj_bool_t manual_reset, pj_bool_t initial,
 				    pj_event_t **ptr_event)
 {
-    pj_event_t *event;
-
-    event = PJ_POOL_ALLOC_T(pool, pj_event_t);
-
-    init_mutex(&event->mutex, name, PJ_MUTEX_SIMPLE);
-    pthread_cond_init(&event->cond, 0);
-    event->auto_reset = !manual_reset;
-    event->threads_waiting = 0;
-
-    if (initial) {
-	event->state = EV_STATE_SET;
-	event->threads_to_release = 1;
-    } else {
-	event->state = EV_STATE_OFF;
-	event->threads_to_release = 0;
-    }
-
-    *ptr_event = event;
-    return PJ_SUCCESS;
-}
-
-static void event_on_one_release(pj_event_t *event)
-{
-    if (event->state == EV_STATE_SET) {
-	if (event->auto_reset) {
-	    event->threads_to_release = 0;
-	    event->state = EV_STATE_OFF;
-	} else {
-	    /* Manual reset remains on */
-	}
-    } else {
-	if (event->auto_reset) {
-	    /* Only release one */
-	    event->threads_to_release = 0;
-	    event->state = EV_STATE_OFF;
-	} else {
-	    event->threads_to_release--;
-	    pj_assert(event->threads_to_release >= 0);
-	    if (event->threads_to_release==0)
-		event->state = EV_STATE_OFF;
-	}
-    }
+    pj_assert(!"Not supported!");
+    PJ_UNUSED_ARG(pool);
+    PJ_UNUSED_ARG(name);
+    PJ_UNUSED_ARG(manual_reset);
+    PJ_UNUSED_ARG(initial);
+    PJ_UNUSED_ARG(ptr_event);
+    return PJ_EINVALIDOP;
 }
 
 /*
@@ -1760,14 +1714,8 @@ static void event_on_one_release(pj_event_t *event)
  */
 PJ_DEF(pj_status_t) pj_event_wait(pj_event_t *event)
 {
-    pthread_mutex_lock(&event->mutex.mutex);
-    event->threads_waiting++;
-    while (event->state == EV_STATE_OFF)
-	pthread_cond_wait(&event->cond, &event->mutex.mutex);
-    event->threads_waiting--;
-    event_on_one_release(event);
-    pthread_mutex_unlock(&event->mutex.mutex);
-    return PJ_SUCCESS;
+    PJ_UNUSED_ARG(event);
+    return PJ_EINVALIDOP;
 }
 
 /*
@@ -1775,16 +1723,8 @@ PJ_DEF(pj_status_t) pj_event_wait(pj_event_t *event)
  */
 PJ_DEF(pj_status_t) pj_event_trywait(pj_event_t *event)
 {
-    pj_status_t status;
-
-    pthread_mutex_lock(&event->mutex.mutex);
-    status = event->state != EV_STATE_OFF ? PJ_SUCCESS : -1;
-    if (status==PJ_SUCCESS) {
-	event_on_one_release(event);
-    }
-    pthread_mutex_unlock(&event->mutex.mutex);
-
-    return status;
+    PJ_UNUSED_ARG(event);
+    return PJ_EINVALIDOP;
 }
 
 /*
@@ -1792,15 +1732,8 @@ PJ_DEF(pj_status_t) pj_event_trywait(pj_event_t *event)
  */
 PJ_DEF(pj_status_t) pj_event_set(pj_event_t *event)
 {
-    pthread_mutex_lock(&event->mutex.mutex);
-    event->threads_to_release = 1;
-    event->state = EV_STATE_SET;
-    if (event->auto_reset)
-	pthread_cond_signal(&event->cond);
-    else
-	pthread_cond_broadcast(&event->cond);
-    pthread_mutex_unlock(&event->mutex.mutex);
-    return PJ_SUCCESS;
+    PJ_UNUSED_ARG(event);
+    return PJ_EINVALIDOP;
 }
 
 /*
@@ -1808,18 +1741,8 @@ PJ_DEF(pj_status_t) pj_event_set(pj_event_t *event)
  */
 PJ_DEF(pj_status_t) pj_event_pulse(pj_event_t *event)
 {
-    pthread_mutex_lock(&event->mutex.mutex);
-    if (event->threads_waiting) {
-	event->threads_to_release = event->auto_reset ? 1 :
-					event->threads_waiting;
-	event->state = EV_STATE_PULSED;
-	if (event->threads_to_release==1)
-	    pthread_cond_signal(&event->cond);
-	else
-	    pthread_cond_broadcast(&event->cond);
-    }
-    pthread_mutex_unlock(&event->mutex.mutex);
-    return PJ_SUCCESS;
+    PJ_UNUSED_ARG(event);
+    return PJ_EINVALIDOP;
 }
 
 /*
@@ -1827,11 +1750,8 @@ PJ_DEF(pj_status_t) pj_event_pulse(pj_event_t *event)
  */
 PJ_DEF(pj_status_t) pj_event_reset(pj_event_t *event)
 {
-    pthread_mutex_lock(&event->mutex.mutex);
-    event->state = EV_STATE_OFF;
-    event->threads_to_release = 0;
-    pthread_mutex_unlock(&event->mutex.mutex);
-    return PJ_SUCCESS;
+    PJ_UNUSED_ARG(event);
+    return PJ_EINVALIDOP;
 }
 
 /*
@@ -1839,9 +1759,8 @@ PJ_DEF(pj_status_t) pj_event_reset(pj_event_t *event)
  */
 PJ_DEF(pj_status_t) pj_event_destroy(pj_event_t *event)
 {
-    pj_mutex_destroy(&event->mutex);
-    pthread_cond_destroy(&event->cond);
-    return PJ_SUCCESS;
+    PJ_UNUSED_ARG(event);
+    return PJ_EINVALIDOP;
 }
 
 #endif	/* PJ_HAS_EVENT_OBJ */
@@ -1920,13 +1839,3 @@ PJ_DEF(pj_color_t) pj_term_get_color(void)
 
 #endif	/* PJ_TERM_HAS_COLOR */
 
-#if !defined(PJ_DARWINOS) || PJ_DARWINOS == 0
-/*
- * pj_run_app()
- */
-PJ_DEF(int) pj_run_app(pj_main_func_ptr main_func, int argc, char *argv[],
-                       unsigned flags)
-{
-    return (*main_func)(argc, argv);
-}
-#endif

@@ -44,7 +44,7 @@ static void sort_codecs(pjmedia_codec_mgr *mgr);
  * Duplicate codec parameter.
  */
 PJ_DEF(pjmedia_codec_param*) pjmedia_codec_param_clone(
-					pj_pool_t *pool, 
+					pj_pool_t *pool,
 					const pjmedia_codec_param *src)
 {
     pjmedia_codec_param *p;
@@ -57,15 +57,15 @@ PJ_DEF(pjmedia_codec_param*) pjmedia_codec_param_clone(
     /* Update codec param */
     pj_memcpy(p, src, sizeof(pjmedia_codec_param));
     for (i = 0; i < src->setting.dec_fmtp.cnt; ++i) {
-	pj_strdup(pool, &p->setting.dec_fmtp.param[i].name, 
+	pj_strdup(pool, &p->setting.dec_fmtp.param[i].name,
 		  &src->setting.dec_fmtp.param[i].name);
-	pj_strdup(pool, &p->setting.dec_fmtp.param[i].val, 
+	pj_strdup(pool, &p->setting.dec_fmtp.param[i].val,
 		  &src->setting.dec_fmtp.param[i].val);
     }
     for (i = 0; i < src->setting.enc_fmtp.cnt; ++i) {
-	pj_strdup(pool, &p->setting.enc_fmtp.param[i].name, 
+	pj_strdup(pool, &p->setting.enc_fmtp.param[i].name,
 		  &src->setting.enc_fmtp.param[i].name);
-	pj_strdup(pool, &p->setting.enc_fmtp.param[i].val, 
+	pj_strdup(pool, &p->setting.enc_fmtp.param[i].val,
 		  &src->setting.enc_fmtp.param[i].val);
     }
 
@@ -105,18 +105,9 @@ PJ_DEF(pj_status_t) pjmedia_codec_mgr_init (pjmedia_codec_mgr *mgr,
  */
 PJ_DEF(pj_status_t) pjmedia_codec_mgr_destroy (pjmedia_codec_mgr *mgr)
 {
-    pjmedia_codec_factory *factory;
     unsigned i;
 
     PJ_ASSERT_RETURN(mgr, PJ_EINVAL);
-
-    /* Destroy all factories in the list */
-    factory = mgr->factory_list.next;
-    while (factory != &mgr->factory_list) {
-	pjmedia_codec_factory *next = factory->next;
-	(*factory->op->destroy)();
-	factory = next;
-    }
 
     /* Cleanup all pools of all codec default params */
     for (i=0; i<mgr->codec_cnt; ++i) {
@@ -152,13 +143,6 @@ PJ_DEF(pj_status_t) pjmedia_codec_mgr_register_factory( pjmedia_codec_mgr *mgr,
     pj_status_t status;
 
     PJ_ASSERT_RETURN(mgr && factory, PJ_EINVAL);
-
-    /* Since 2.0 we require codec factory to implement "destroy" op. Please
-     * see: https://trac.pjsip.org/repos/ticket/1294
-     *
-     * Really! Please do see it.
-     */
-    PJ_ASSERT_RETURN(factory->op->destroy != NULL, PJ_ENOTSUP);
 
     /* Enum codecs */
     count = PJ_ARRAY_SIZE(info);
@@ -633,11 +617,22 @@ PJ_DEF(pj_status_t) pjmedia_codec_mgr_set_default_param(
     codec_desc->param = PJ_POOL_ZALLOC_T(pool, pjmedia_codec_default_param);
     p = codec_desc->param;
     p->pool = pool;
+    p->param = PJ_POOL_ZALLOC_T(pool, pjmedia_codec_param);
 
     /* Update codec param */
-    p->param = pjmedia_codec_param_clone(pool, param);
-    if (!p->param)
-	return PJ_EINVAL;
+    pj_memcpy(p->param, param, sizeof(pjmedia_codec_param));
+    for (i = 0; i < param->setting.dec_fmtp.cnt; ++i) {
+	pj_strdup(pool, &p->param->setting.dec_fmtp.param[i].name, 
+		  &param->setting.dec_fmtp.param[i].name);
+	pj_strdup(pool, &p->param->setting.dec_fmtp.param[i].val, 
+		  &param->setting.dec_fmtp.param[i].val);
+    }
+    for (i = 0; i < param->setting.enc_fmtp.cnt; ++i) {
+	pj_strdup(pool, &p->param->setting.enc_fmtp.param[i].name, 
+		  &param->setting.enc_fmtp.param[i].name);
+	pj_strdup(pool, &p->param->setting.enc_fmtp.param[i].val, 
+		  &param->setting.enc_fmtp.param[i].val);
+    }
 
     pj_mutex_unlock(mgr->mutex);
 

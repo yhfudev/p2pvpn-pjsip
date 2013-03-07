@@ -33,9 +33,7 @@ PJ_BEGIN_DECL
                               	   char *buf, pj_size_t bufsize );
 PJ_END_DECL
 
-#ifndef PJLIB_MAX_ERR_MSG_HANDLER
-#	define PJLIB_MAX_ERR_MSG_HANDLER   10
-#endif
+#define PJLIB_MAX_ERR_MSG_HANDLER   8
 
 /* Error message handler. */
 static unsigned err_msg_hnd_cnt;
@@ -77,8 +75,7 @@ static const struct
     PJ_BUILD_ERR(PJ_ETOOSMALL,	   "Size is too short"),
     PJ_BUILD_ERR(PJ_EIGNORED,	   "Ignored"),
     PJ_BUILD_ERR(PJ_EIPV6NOTSUP,   "IPv6 is not supported"),
-    PJ_BUILD_ERR(PJ_EAFNOTSUP,	   "Unsupported address family"),
-    PJ_BUILD_ERR(PJ_EGONE,	   "Object no longer exists")
+    PJ_BUILD_ERR(PJ_EAFNOTSUP,	   "Unsupported address family")
 };
 #endif	/* PJ_HAS_ERROR_STRING */
 

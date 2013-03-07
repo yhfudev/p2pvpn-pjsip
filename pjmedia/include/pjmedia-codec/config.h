@@ -34,13 +34,13 @@
 
 #include <pjmedia/types.h>
 
+
 /*
  * Include config_auto.h if autoconf is used (PJ_AUTOCONF is set)
  */
 #if defined(PJ_AUTOCONF)
 #   include <pjmedia-codec/config_auto.h>
 #endif
-
 
 /**
  * Unless specified otherwise, L16 codec is included by default.
@@ -323,18 +323,8 @@
 #endif
 
 /**
- * Enable OpenCORE AMR-WB codec.
- * See https://trac.pjsip.org/repos/ticket/1608 for some info.
- *
- * Default: 0
- */
-#ifndef PJMEDIA_HAS_OPENCORE_AMRWB_CODEC
-#   define PJMEDIA_HAS_OPENCORE_AMRWB_CODEC	0
-#endif
-
-/**
  * Link with libopencore-amrXX via pragma comment on Visual Studio.
- * This option only makes sense if PJMEDIA_HAS_OPENCORE_AMRNB/WB_CODEC
+ * This option only makes sense if PJMEDIA_HAS_OPENCORE_AMRNB_CODEC
  * is enabled.
  *
  * Default: 1
@@ -345,7 +335,7 @@
 
 /**
  * Link with libopencore-amrXX.a that has been produced with gcc.
- * This option only makes sense if PJMEDIA_HAS_OPENCORE_AMRNB/WB_CODEC
+ * This option only makes sense if PJMEDIA_HAS_OPENCORE_AMRNB_CODEC
  * and PJMEDIA_AUTO_LINK_OPENCORE_AMR_LIBS are enabled.
  *
  * Default: 1
@@ -386,80 +376,8 @@
 	  to control which implementation to be used.
 #endif
 
-
-/**
- * Enable SILK codec.
- *
- * Default: 0
- */
-#ifndef PJMEDIA_HAS_SILK_CODEC
-#   define PJMEDIA_HAS_SILK_CODEC		0
-#endif
-
-
-/**
- * SILK codec default complexity setting, valid values are 0 (lowest), 1,
- * and 2.
- *
- * Default: 2
- */
-#ifndef PJMEDIA_CODEC_SILK_DEFAULT_COMPLEXITY
-#   define PJMEDIA_CODEC_SILK_DEFAULT_COMPLEXITY   2
-#endif
-
-/**
- * SILK codec default quality setting, valid values are ranging from
- * 0 (lowest) to 10. Please note that pjsua-lib may override this setting
- * via its codec quality setting (i.e PJSUA_DEFAULT_CODEC_QUALITY).
- *
- * Default: 10
- */
-#ifndef PJMEDIA_CODEC_SILK_DEFAULT_QUALITY
-#   define PJMEDIA_CODEC_SILK_DEFAULT_QUALITY	    10
-#endif
-
-
-/**
- * Specify if FFMPEG codecs are available.
- *
- * Default: PJMEDIA_HAS_LIBAVCODEC
- */
-#ifndef PJMEDIA_HAS_FFMPEG_CODEC
-#   define PJMEDIA_HAS_FFMPEG_CODEC		PJMEDIA_HAS_LIBAVCODEC
-#endif
-
-
-/**
- * Specify if FFMPEG video codecs are available.
- *
- * Default: PJMEDIA_HAS_FFMPEG_CODEC
- */
-#ifndef PJMEDIA_HAS_FFMPEG_VID_CODEC
-#   define PJMEDIA_HAS_FFMPEG_VID_CODEC		PJMEDIA_HAS_FFMPEG_CODEC
-#endif
-
-/**
- * Enable FFMPEG H263+/H263-1998 codec.
- *
- * Default: 1
- */
-#ifndef PJMEDIA_HAS_FFMPEG_CODEC_H263P
-#   define PJMEDIA_HAS_FFMPEG_CODEC_H263P	PJMEDIA_HAS_FFMPEG_VID_CODEC
-#endif
-
-/**
- * Enable FFMPEG H264 codec (requires libx264).
- *
- * Default: 0
- */
-#ifndef PJMEDIA_HAS_FFMPEG_CODEC_H264
-#   define PJMEDIA_HAS_FFMPEG_CODEC_H264	PJMEDIA_HAS_FFMPEG_VID_CODEC
-#endif
-
 /**
  * @}
  */
-
-
 
 #endif	/* __PJMEDIA_CODEC_CONFIG_H__ */

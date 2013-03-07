@@ -34,10 +34,6 @@
 #include <pj/assert.h>
 #include <pj/errno.h>
 #include <pj/lock.h>
-#include <pj/log.h>
-#include <pj/rand.h>
-
-#define THIS_FILE	"timer.c"
 
 #define HEAP_PARENT(X)	(X == 0 ? 0 : (((X) - 1) / 2))
 #define HEAP_LEFT(X)	(((X)+(X))+1)
@@ -452,28 +448,13 @@ PJ_DEF(pj_timer_entry*) pj_timer_entry_init( pj_timer_entry *entry,
     entry->id = id;
     entry->user_data = user_data;
     entry->cb = cb;
-    entry->_grp_lock = NULL;
 
     return entry;
 }
 
-#if PJ_TIMER_DEBUG
-static pj_status_t schedule_w_grp_lock_dbg(pj_timer_heap_t *ht,
-                                           pj_timer_entry *entry,
-                                           const pj_time_val *delay,
-                                           pj_bool_t set_id,
-                                           int id_val,
-					   pj_grp_lock_t *grp_lock,
-					   const char *src_file,
-					   int src_line)
-#else
-static pj_status_t schedule_w_grp_lock(pj_timer_heap_t *ht,
-                                       pj_timer_entry *entry,
-                                       const pj_time_val *delay,
-                                       pj_bool_t set_id,
-                                       int id_val,
-                                       pj_grp_lock_t *grp_lock)
-#endif
+PJ_DEF(pj_status_t) pj_timer_heap_schedule( pj_timer_heap_t *ht,
+					    pj_timer_entry *entry, 
+					    const pj_time_val *delay)
 {
     pj_status_t status;
     pj_time_val expires;
@@ -484,75 +465,18 @@ static pj_status_t schedule_w_grp_lock(pj_timer_heap_t *ht,
     /* Prevent same entry from being scheduled more than once */
     PJ_ASSERT_RETURN(entry->_timer_id < 1, PJ_EINVALIDOP);
 
-#if PJ_TIMER_DEBUG
-    entry->src_file = src_file;
-    entry->src_line = src_line;
-#endif
     pj_gettickcount(&expires);
     PJ_TIME_VAL_ADD(expires, *delay);
     
     lock_timer_heap(ht);
     status = schedule_entry(ht, entry, &expires);
-    if (status == PJ_SUCCESS) {
-	if (set_id)
-	    entry->id = id_val;
-	entry->_grp_lock = grp_lock;
-	if (entry->_grp_lock) {
-	    pj_grp_lock_add_ref(entry->_grp_lock);
-	}
-    }
     unlock_timer_heap(ht);
 
     return status;
 }
 
-
-#if PJ_TIMER_DEBUG
-PJ_DEF(pj_status_t) pj_timer_heap_schedule_dbg( pj_timer_heap_t *ht,
-						pj_timer_entry *entry,
-						const pj_time_val *delay,
-						const char *src_file,
-						int src_line)
-{
-    return schedule_w_grp_lock_dbg(ht, entry, delay, PJ_FALSE, 1, NULL,
-                                   src_file, src_line);
-}
-
-PJ_DEF(pj_status_t) pj_timer_heap_schedule_w_grp_lock_dbg(
-						pj_timer_heap_t *ht,
-						pj_timer_entry *entry,
-						const pj_time_val *delay,
-						int id_val,
-                                                pj_grp_lock_t *grp_lock,
-						const char *src_file,
-						int src_line)
-{
-    return schedule_w_grp_lock_dbg(ht, entry, delay, PJ_TRUE, id_val,
-                                   grp_lock, src_file, src_line);
-}
-
-#else
-PJ_DEF(pj_status_t) pj_timer_heap_schedule( pj_timer_heap_t *ht,
-                                            pj_timer_entry *entry,
-                                            const pj_time_val *delay)
-{
-    return schedule_w_grp_lock(ht, entry, delay, PJ_FALSE, 1, NULL);
-}
-
-PJ_DEF(pj_status_t) pj_timer_heap_schedule_w_grp_lock(pj_timer_heap_t *ht,
-                                                      pj_timer_entry *entry,
-                                                      const pj_time_val *delay,
-                                                      int id_val,
-                                                      pj_grp_lock_t *grp_lock)
-{
-    return schedule_w_grp_lock(ht, entry, delay, PJ_TRUE, id_val, grp_lock);
-}
-#endif
-
-static int cancel_timer(pj_timer_heap_t *ht,
-			pj_timer_entry *entry,
-			pj_bool_t set_id,
-			int id_val)
+PJ_DEF(int) pj_timer_heap_cancel( pj_timer_heap_t *ht,
+				  pj_timer_entry *entry)
 {
     int count;
 
@@ -560,30 +484,9 @@ static int cancel_timer(pj_timer_heap_t *ht,
 
     lock_timer_heap(ht);
     count = cancel(ht, entry, 1);
-    if (set_id) {
-	entry->id = id_val;
-    }
-    if (entry->_grp_lock) {
-	pj_grp_lock_t *grp_lock = entry->_grp_lock;
-	entry->_grp_lock = NULL;
-	pj_grp_lock_dec_ref(grp_lock);
-    }
     unlock_timer_heap(ht);
 
     return count;
-}
-
-PJ_DEF(int) pj_timer_heap_cancel( pj_timer_heap_t *ht,
-				  pj_timer_entry *entry)
-{
-    return cancel_timer(ht, entry, PJ_FALSE, 0);
-}
-
-PJ_DEF(int) pj_timer_heap_cancel_if_active(pj_timer_heap_t *ht,
-                                           pj_timer_entry *entry,
-                                           int id_val)
-{
-    return cancel_timer(ht, entry, PJ_TRUE, id_val);
 }
 
 PJ_DEF(unsigned) pj_timer_heap_poll( pj_timer_heap_t *ht, 
@@ -609,23 +512,11 @@ PJ_DEF(unsigned) pj_timer_heap_poll( pj_timer_heap_t *ht,
             count < ht->max_entries_per_poll ) 
     {
 	pj_timer_entry *node = remove_node(ht, 0);
-	pj_grp_lock_t *grp_lock;
-
 	++count;
 
-	grp_lock = node->_grp_lock;
-	node->_grp_lock = NULL;
-
 	unlock_timer_heap(ht);
-
-	PJ_RACE_ME(5);
-
 	if (node->cb)
 	    (*node->cb)(ht, node);
-
-	if (grp_lock)
-	    pj_grp_lock_dec_ref(grp_lock);
-
 	lock_timer_heap(ht);
     }
     if (ht->cur_size && next_delay) {
@@ -661,45 +552,4 @@ PJ_DEF(pj_status_t) pj_timer_heap_earliest_time( pj_timer_heap_t * ht,
 
     return PJ_SUCCESS;
 }
-
-#if PJ_TIMER_DEBUG
-PJ_DEF(void) pj_timer_heap_dump(pj_timer_heap_t *ht)
-{
-    lock_timer_heap(ht);
-
-    PJ_LOG(3,(THIS_FILE, "Dumping timer heap:"));
-    PJ_LOG(3,(THIS_FILE, "  Cur size: %d entries, max: %d",
-			 (int)ht->cur_size, (int)ht->max_size));
-
-    if (ht->cur_size) {
-	unsigned i;
-	pj_time_val now;
-
-	PJ_LOG(3,(THIS_FILE, "  Entries: "));
-	PJ_LOG(3,(THIS_FILE, "    _id\tId\tElapsed\tSource"));
-	PJ_LOG(3,(THIS_FILE, "    ----------------------------------"));
-
-	pj_gettickcount(&now);
-
-	for (i=0; i<(unsigned)ht->cur_size; ++i) {
-	    pj_timer_entry *e = ht->heap[i];
-	    pj_time_val delta;
-
-	    if (PJ_TIME_VAL_LTE(e->_timer_value, now))
-		delta.sec = delta.msec = 0;
-	    else {
-		delta = e->_timer_value;
-		PJ_TIME_VAL_SUB(delta, now);
-	    }
-
-	    PJ_LOG(3,(THIS_FILE, "    %d\t%d\t%d.%03d\t%s:%d",
-		      e->_timer_id, e->id,
-		      (int)delta.sec, (int)delta.msec,
-		      e->src_file, e->src_line));
-	}
-    }
-
-    unlock_timer_heap(ht);
-}
-#endif
 

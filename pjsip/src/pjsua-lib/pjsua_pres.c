@@ -389,10 +389,6 @@ PJ_DEF(pj_status_t) pjsua_buddy_add( const pjsua_buddy_config *cfg,
 			PJ_ARRAY_SIZE(pjsua_var.buddy),
 		     PJ_ETOOMANY);
 
-    PJ_LOG(4,(THIS_FILE, "Adding buddy: %.*s",
-	      (int)cfg->uri.slen, cfg->uri.ptr));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
 
     /* Find empty slot */
@@ -406,7 +402,6 @@ PJ_DEF(pj_status_t) pjsua_buddy_add( const pjsua_buddy_config *cfg,
 	PJSUA_UNLOCK();
 	/* This shouldn't happen */
 	pj_assert(!"index < PJ_ARRAY_SIZE(pjsua_var.buddy)");
-	pj_log_pop_indent();
 	return PJ_ETOOMANY;
     }
 
@@ -436,7 +431,6 @@ PJ_DEF(pj_status_t) pjsua_buddy_add( const pjsua_buddy_config *cfg,
 	pj_pool_release(buddy->pool);
 	buddy->pool = NULL;
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return PJSIP_EINVALIDURI;
     }
 
@@ -445,7 +439,6 @@ PJ_DEF(pj_status_t) pjsua_buddy_add( const pjsua_buddy_config *cfg,
 	pj_pool_release(buddy->pool);
 	buddy->pool = NULL;
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return PJSIP_EINVALIDSCHEME;
     }
 
@@ -476,11 +469,8 @@ PJ_DEF(pj_status_t) pjsua_buddy_add( const pjsua_buddy_config *cfg,
 
     PJSUA_UNLOCK();
 
-    PJ_LOG(4,(THIS_FILE, "Buddy %d added.", index));
-
     pjsua_buddy_subscribe_pres(index, cfg->subscribe);
 
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -505,9 +495,6 @@ PJ_DEF(pj_status_t) pjsua_buddy_del(pjsua_buddy_id buddy_id)
     if (status != PJ_SUCCESS)
 	return status;
 
-    PJ_LOG(4,(THIS_FILE, "Buddy %d: deleting..", buddy_id));
-    pj_log_push_indent();
-
     /* Unsubscribe presence */
     pjsua_buddy_subscribe_pres(buddy_id, PJ_FALSE);
 
@@ -531,7 +518,6 @@ PJ_DEF(pj_status_t) pjsua_buddy_del(pjsua_buddy_id buddy_id)
     reset_buddy(buddy_id);
 
     unlock_buddy(&lck);
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -551,15 +537,11 @@ PJ_DEF(pj_status_t) pjsua_buddy_subscribe_pres( pjsua_buddy_id buddy_id,
     if (status != PJ_SUCCESS)
 	return status;
 
-    PJ_LOG(4,(THIS_FILE, "Buddy %d: unsubscribing presence..", buddy_id));
-    pj_log_push_indent();
-
     lck.buddy->monitor = subscribe;
 
     pjsua_buddy_update_pres(buddy_id);
 
     unlock_buddy(&lck);
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 }
 
@@ -578,21 +560,16 @@ PJ_DEF(pj_status_t) pjsua_buddy_update_pres(pjsua_buddy_id buddy_id)
     if (status != PJ_SUCCESS)
 	return status;
 
-    PJ_LOG(4,(THIS_FILE, "Buddy %d: updating presence..", buddy_id));
-    pj_log_push_indent();
-
     /* Is this an unsubscribe request? */
     if (!lck.buddy->monitor) {
 	unsubscribe_buddy_presence(buddy_id);
 	unlock_buddy(&lck);
-	pj_log_pop_indent();
 	return PJ_SUCCESS;
     }
 
     /* Ignore if presence is already active for the buddy */
     if (lck.buddy->sub) {
 	unlock_buddy(&lck);
-	pj_log_pop_indent();
 	return PJ_SUCCESS;
     }
 
@@ -600,7 +577,7 @@ PJ_DEF(pj_status_t) pjsua_buddy_update_pres(pjsua_buddy_id buddy_id)
     subscribe_buddy_presence(buddy_id);
 
     unlock_buddy(&lck);
-    pj_log_pop_indent();
+
     return PJ_SUCCESS;
 }
 
@@ -768,7 +745,6 @@ static void pres_evsub_on_srv_state( pjsip_evsub *sub, pjsip_event *event)
 
 	PJ_LOG(4,(THIS_FILE, "Server subscription to %s is %s",
 		  uapres->remote, pjsip_evsub_get_state_name(sub)));
-	pj_log_push_indent();
 
 	state = pjsip_evsub_get_state(sub);
 
@@ -785,7 +761,6 @@ static void pres_evsub_on_srv_state( pjsip_evsub *sub, pjsip_event *event)
 	    pjsip_evsub_set_mod_data(sub, pjsua_var.mod.id, NULL);
 	    pj_list_erase(uapres);
 	}
-	pj_log_pop_indent();
     }
 
     PJSUA_UNLOCK();
@@ -831,7 +806,6 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 
     PJ_LOG(4,(THIS_FILE, "Creating server subscription, using account %d",
 	      acc_id));
-    pj_log_push_indent();
     
     /* Create suitable Contact header */
     if (acc->contact.slen) {
@@ -845,7 +819,6 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 	    PJSUA_UNLOCK();
 	    pjsip_endpt_respond_stateless(pjsua_var.endpt, rdata, 400, NULL,
 					  NULL, NULL);
-	    pj_log_pop_indent();
 	    return PJ_TRUE;
 	}
     }
@@ -860,34 +833,7 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 	PJSUA_UNLOCK();
 	pjsip_endpt_respond_stateless(pjsua_var.endpt, rdata, 400, NULL,
 				      NULL, NULL);
-	pj_log_pop_indent();
 	return PJ_TRUE;
-    }
-
-    if (acc->cfg.allow_via_rewrite && acc->via_addr.host.slen > 0) {
-        pjsip_dlg_set_via_sent_by(dlg, &acc->via_addr, acc->via_tp);
-    } else if (!pjsua_sip_acc_is_using_stun(acc_id)) {
-	/* Choose local interface to use in Via if acc is not using
-	 * STUN. See https://trac.pjsip.org/repos/ticket/1412
-	 */
-	char target_buf[PJSIP_MAX_URL_SIZE];
-	pj_str_t target;
-	pjsip_host_port via_addr;
-	const void *via_tp;
-
-	target.ptr = target_buf;
-	target.slen = pjsip_uri_print(PJSIP_URI_IN_REQ_URI,
-	                              dlg->target,
-	                              target_buf, sizeof(target_buf));
-	if (target.slen < 0) target.slen = 0;
-
-	if (pjsua_acc_get_uac_addr(acc_id, dlg->pool, &target,
-				   &via_addr, NULL, NULL,
-				   &via_tp) == PJ_SUCCESS)
-	{
-	    pjsip_dlg_set_via_sent_by(dlg, &via_addr,
-				      (pjsip_transport*)via_tp);
-	}
     }
 
     /* Set credentials and preference. */
@@ -918,7 +864,6 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 	}
 
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return PJ_TRUE;
     }
 
@@ -989,7 +934,6 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 	    pj_list_erase(uapres);
 	    pjsip_pres_terminate(sub, PJ_FALSE);
 	    PJSUA_UNLOCK();
-	    pj_log_pop_indent();
 	    return PJ_FALSE;
 	}
 
@@ -1008,7 +952,6 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 	pj_list_erase(uapres);
 	pjsip_pres_terminate(sub, PJ_FALSE);
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return PJ_TRUE;
     }
 
@@ -1020,7 +963,6 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
 	pj_list_erase(uapres);
 	pjsip_pres_terminate(sub, PJ_FALSE);
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return PJ_FALSE;
     }
 
@@ -1033,7 +975,7 @@ static pj_bool_t pres_on_rx_request(pjsip_rx_data *rdata)
     /* Done: */
 
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
+
     return PJ_TRUE;
 }
 
@@ -1064,10 +1006,6 @@ PJ_DEF(pj_status_t) pjsua_pres_notify( pjsua_acc_id acc_id,
     /* Check that account is valid */
     PJ_ASSERT_RETURN(pjsua_var.acc[acc_id].valid, PJ_EINVALIDOP);
 
-    PJ_LOG(4,(THIS_FILE, "Acc %d: sending NOTIFY for srv_pres=0x%p..",
-	      acc_id, (int)(long)srv_pres));
-    pj_log_push_indent();
-
     PJSUA_LOCK();
 
     acc = &pjsua_var.acc[acc_id];
@@ -1076,7 +1014,6 @@ PJ_DEF(pj_status_t) pjsua_pres_notify( pjsua_acc_id acc_id,
     if (pj_list_find_node(&acc->pres_srv_list, srv_pres) == NULL) {
 	/* Subscription has been terminated */
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return PJ_EINVALIDOP;
     }
 
@@ -1118,7 +1055,6 @@ PJ_DEF(pj_status_t) pjsua_pres_notify( pjsua_acc_id acc_id,
 	pj_list_erase(srv_pres);
 	pjsip_pres_terminate(srv_pres->sub, PJ_FALSE);
 	PJSUA_UNLOCK();
-	pj_log_pop_indent();
 	return status;
     }
 
@@ -1135,7 +1071,7 @@ PJ_DEF(pj_status_t) pjsua_pres_notify( pjsua_acc_id acc_id,
     }
 
     PJSUA_UNLOCK();
-    pj_log_pop_indent();
+
     return PJ_SUCCESS;
 }
 
@@ -1195,9 +1131,6 @@ static pj_status_t send_publish(int acc_id, pj_bool_t active)
     pjsip_tx_data *tdata;
     pj_status_t status;
 
-    PJ_LOG(5,(THIS_FILE, "Acc %d: sending %sPUBLISH..",
-	      acc_id, (active ? "" : "un-")));
-    pj_log_push_indent();
 
     /* Create PUBLISH request */
     if (active) {
@@ -1255,26 +1188,6 @@ static pj_status_t send_publish(int acc_id, pj_bool_t active)
     /* Add headers etc */
     pjsua_process_msg_data(tdata, NULL);
 
-    /* Set Via sent-by */
-    if (acc->cfg.allow_via_rewrite && acc->via_addr.host.slen > 0) {
-        pjsip_publishc_set_via_sent_by(acc->publish_sess, &acc->via_addr,
-                                       acc->via_tp);
-    } else if (!pjsua_sip_acc_is_using_stun(acc_id)) {
-	/* Choose local interface to use in Via if acc is not using
-	 * STUN. See https://trac.pjsip.org/repos/ticket/1412
-	 */
-	pjsip_host_port via_addr;
-	const void *via_tp;
-
-	if (pjsua_acc_get_uac_addr(acc_id, acc->pool, &acc_cfg->id,
-				   &via_addr, NULL, NULL,
-				   &via_tp) == PJ_SUCCESS)
-        {
-	    pjsip_publishc_set_via_sent_by(acc->publish_sess, &via_addr,
-	                                   (pjsip_transport*)via_tp);
-        }
-    }
-
     /* Send the PUBLISH request */
     status = pjsip_publishc_send(acc->publish_sess, tdata);
     if (status == PJ_EPENDING) {
@@ -1286,7 +1199,6 @@ static pj_status_t send_publish(int acc_id, pj_bool_t active)
     }
 
     acc->publish_state = acc->online_status;
-    pj_log_pop_indent();
     return PJ_SUCCESS;
 
 on_error:
@@ -1294,7 +1206,6 @@ on_error:
 	pjsip_publishc_destroy(acc->publish_sess);
 	acc->publish_sess = NULL;
     }
-    pj_log_pop_indent();
     return status;
 }
 
@@ -1551,7 +1462,6 @@ static void pjsua_evsub_on_state( pjsip_evsub *sub, pjsip_event *event)
 		  (int)pjsua_var.buddy[buddy->index].uri.slen,
 		  pjsua_var.buddy[buddy->index].uri.ptr, 
 		  pjsip_evsub_get_state_name(sub)));
-	pj_log_push_indent();
 
 	if (pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
 	    int resub_delay = -1;
@@ -1671,8 +1581,6 @@ static void pjsua_evsub_on_state( pjsip_evsub *sub, pjsip_event *event)
 	    buddy->dlg = NULL;
 	    pjsip_evsub_set_mod_data(sub, pjsua_var.mod.id, NULL);
 	}
-
-	pj_log_pop_indent();
     }
 }
 
@@ -1784,9 +1692,8 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
 
     acc = &pjsua_var.acc[acc_id];
 
-    PJ_LOG(4,(THIS_FILE, "Buddy %d: subscribing presence,using account %d..",
-	      buddy_id, acc_id));
-    pj_log_push_indent();
+    PJ_LOG(4,(THIS_FILE, "Using account %d for buddy %d subscription",
+			 acc_id, buddy_id));
 
     /* Generate suitable Contact header unless one is already set in
      * the account
@@ -1802,7 +1709,6 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	    pjsua_perror(THIS_FILE, "Unable to generate Contact header", 
 		         status);
 	    pj_pool_release(tmp_pool);
-	    pj_log_pop_indent();
 	    return;
 	}
     }
@@ -1817,7 +1723,6 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	pjsua_perror(THIS_FILE, "Unable to create dialog", 
 		     status);
 	if (tmp_pool) pj_pool_release(tmp_pool);
-	pj_log_pop_indent();
 	return;
     }
 
@@ -1825,25 +1730,6 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
      * fails the dialog will be destroyed prematurely.
      */
     pjsip_dlg_inc_lock(buddy->dlg);
-
-    if (acc->cfg.allow_via_rewrite && acc->via_addr.host.slen > 0) {
-        pjsip_dlg_set_via_sent_by(buddy->dlg, &acc->via_addr, acc->via_tp);
-    } else if (!pjsua_sip_acc_is_using_stun(acc_id)) {
-	/* Choose local interface to use in Via if acc is not using
-	 * STUN. See https://trac.pjsip.org/repos/ticket/1412
-	 */
-	pjsip_host_port via_addr;
-	const void *via_tp;
-
-	if (pjsua_acc_get_uac_addr(acc_id, buddy->dlg->pool, &buddy->uri,
-				   &via_addr, NULL, NULL,
-				   &via_tp) == PJ_SUCCESS)
-        {
-	    pjsip_dlg_set_via_sent_by(buddy->dlg, &via_addr,
-				      (pjsip_transport*)via_tp);
-        }
-    }
-
 
     status = pjsip_pres_create_uac( buddy->dlg, &pres_callback, 
 				    PJSIP_EVSUB_NO_EVENT_ID, &buddy->sub);
@@ -1856,7 +1742,6 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	 */
 	if (buddy->dlg) pjsip_dlg_dec_lock(buddy->dlg);
 	if (tmp_pool) pj_pool_release(tmp_pool);
-	pj_log_pop_indent();
 	return;
     }
 
@@ -1896,7 +1781,6 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	pjsua_perror(THIS_FILE, "Unable to create initial SUBSCRIBE", 
 		     status);
 	if (tmp_pool) pj_pool_release(tmp_pool);
-	pj_log_pop_indent();
 	return;
     }
 
@@ -1912,13 +1796,11 @@ static void subscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	pjsua_perror(THIS_FILE, "Unable to send initial SUBSCRIBE", 
 		     status);
 	if (tmp_pool) pj_pool_release(tmp_pool);
-	pj_log_pop_indent();
 	return;
     }
 
     pjsip_dlg_dec_lock(buddy->dlg);
     if (tmp_pool) pj_pool_release(tmp_pool);
-    pj_log_pop_indent();
 }
 
 
@@ -1939,9 +1821,6 @@ static void unsubscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	return;
     }
 
-    PJ_LOG(5,(THIS_FILE, "Buddy %d: unsubscribing..", buddy_id));
-    pj_log_push_indent();
-
     status = pjsip_pres_initiate( buddy->sub, 0, &tdata);
     if (status == PJ_SUCCESS) {
 	pjsua_process_msg_data(tdata, NULL);
@@ -1954,8 +1833,6 @@ static void unsubscribe_buddy_presence(pjsua_buddy_id buddy_id)
 	pjsua_perror(THIS_FILE, "Unable to unsubscribe presence", 
 		     status);
     }
-
-    pj_log_pop_indent();
 }
 
 /* It does what it says.. */
@@ -2011,11 +1888,6 @@ static void mwi_evsub_on_state( pjsip_evsub *sub, pjsip_event *event)
 	      (int)acc->cfg.id.slen, acc->cfg.id.ptr, 
 	      pjsip_evsub_get_state_name(sub)));
 
-    /* Call callback */
-    if (pjsua_var.ua_cfg.cb.on_mwi_state) {
-	(*pjsua_var.ua_cfg.cb.on_mwi_state)(acc->index, sub);
-    }
-
     if (pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
 	/* Clear subscription */
 	acc->mwi_dlg = NULL;
@@ -2050,15 +1922,10 @@ static void mwi_evsub_on_rx_notify(pjsip_evsub *sub,
     mwi_info.evsub = sub;
     mwi_info.rdata = rdata;
 
-    PJ_LOG(4,(THIS_FILE, "MWI got NOTIFY.."));
-    pj_log_push_indent();
-
     /* Call callback */
     if (pjsua_var.ua_cfg.cb.on_mwi_info) {
 	(*pjsua_var.ua_cfg.cb.on_mwi_info)(acc->index, &mwi_info);
     }
-
-    pj_log_pop_indent();
 }
 
 
@@ -2081,22 +1948,17 @@ static pjsip_evsub_user mwi_cb =
 	     */
 };
 
-pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
+void pjsua_start_mwi(pjsua_acc *acc)
 {
-    pjsua_acc *acc;
     pj_pool_t *tmp_pool = NULL;
     pj_str_t contact;
     pjsip_tx_data *tdata;
-    pj_status_t status = PJ_SUCCESS;
-
-    PJ_ASSERT_RETURN(acc_id>=0 && acc_id<(int)PJ_ARRAY_SIZE(pjsua_var.acc)
-                     && pjsua_var.acc[acc_id].valid, PJ_EINVAL);
-
-    acc = &pjsua_var.acc[acc_id];
+    pj_status_t status;
 
     if (!acc->cfg.mwi_enabled) {
 	if (acc->mwi_sub) {
 	    /* Terminate MWI subscription */
+	    pjsip_tx_data *tdata;
 	    pjsip_evsub *sub = acc->mwi_sub;
 
 	    /* Detach sub from this account */
@@ -2105,35 +1967,19 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
 	    pjsip_evsub_set_mod_data(sub, pjsua_var.mod.id, NULL);
 
 	    /* Unsubscribe */
-	    status = pjsip_mwi_initiate(sub, 0, &tdata);
+	    status = pjsip_mwi_initiate(acc->mwi_sub, 0, &tdata);
 	    if (status == PJ_SUCCESS) {
-		status = pjsip_mwi_send_request(sub, tdata);
+		status = pjsip_mwi_send_request(acc->mwi_sub, tdata);
 	    }
 	}
-	return status;
+	return;
     }
 
-    /* Subscription is already active */
     if (acc->mwi_sub) {
-	if (!force_renew)
-	    return PJ_SUCCESS;
-	
-	/* Update MWI subscription */
-	pj_assert(acc->mwi_dlg);
-	pjsip_dlg_inc_lock(acc->mwi_dlg);
-	
-	status = pjsip_mwi_initiate(acc->mwi_sub, acc->cfg.mwi_expires, &tdata);
-	if (status == PJ_SUCCESS) {
-	    pjsua_process_msg_data(tdata, NULL);
-	    status = pjsip_pres_send_request(acc->mwi_sub, tdata);
-	}
+	/* Subscription is already active */
+	return;
 
-	pjsip_dlg_dec_lock(acc->mwi_dlg);
-	return status;
     }
-
-    PJ_LOG(4,(THIS_FILE, "Starting MWI subscription.."));
-    pj_log_push_indent();
 
     /* Generate suitable Contact header unless one is already set in 
      * the account
@@ -2147,7 +1993,8 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
 	if (status != PJ_SUCCESS) {
 	    pjsua_perror(THIS_FILE, "Unable to generate Contact header", 
 		         status);
-	    goto on_return;
+	    pj_pool_release(tmp_pool);
+	    return;
 	}
     }
 
@@ -2159,7 +2006,8 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
 				   NULL, &acc->mwi_dlg);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "Unable to create dialog", status);
-	goto on_return;
+	if (tmp_pool) pj_pool_release(tmp_pool);
+	return;
     }
 
     /* Increment the dialog's lock otherwise when presence session creation
@@ -2167,31 +2015,14 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
      */
     pjsip_dlg_inc_lock(acc->mwi_dlg);
 
-    if (acc->cfg.allow_via_rewrite && acc->via_addr.host.slen > 0) {
-        pjsip_dlg_set_via_sent_by(acc->mwi_dlg, &acc->via_addr, acc->via_tp);
-    } else if (!pjsua_sip_acc_is_using_stun(acc_id)) {
-   	/* Choose local interface to use in Via if acc is not using
-   	 * STUN. See https://trac.pjsip.org/repos/ticket/1412
-   	 */
-   	pjsip_host_port via_addr;
-   	const void *via_tp;
-
-   	if (pjsua_acc_get_uac_addr(acc_id, acc->mwi_dlg->pool, &acc->cfg.id,
-   				   &via_addr, NULL, NULL,
-   				   &via_tp) == PJ_SUCCESS)
-   	{
-   	    pjsip_dlg_set_via_sent_by(acc->mwi_dlg, &via_addr,
-   	                              (pjsip_transport*)via_tp);
-   	}
-    }
-
     /* Create UAC subscription */
     status = pjsip_mwi_create_uac(acc->mwi_dlg, &mwi_cb, 
 				  PJSIP_EVSUB_NO_EVENT_ID, &acc->mwi_sub);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "Error creating MWI subscription", status);
+	if (tmp_pool) pj_pool_release(tmp_pool);
 	if (acc->mwi_dlg) pjsip_dlg_dec_lock(acc->mwi_dlg);
-	goto on_return;
+	return;
     }
 
     /* If account is locked to specific transport, then lock dialog
@@ -2220,7 +2051,7 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
 
     pjsip_evsub_set_mod_data(acc->mwi_sub, pjsua_var.mod.id, acc);
 
-    status = pjsip_mwi_initiate(acc->mwi_sub, acc->cfg.mwi_expires, &tdata);
+    status = pjsip_mwi_initiate(acc->mwi_sub, -1, &tdata);
     if (status != PJ_SUCCESS) {
 	if (acc->mwi_dlg) pjsip_dlg_dec_lock(acc->mwi_dlg);
 	if (acc->mwi_sub) {
@@ -2230,7 +2061,8 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
 	acc->mwi_dlg = NULL;
 	pjsua_perror(THIS_FILE, "Unable to create initial MWI SUBSCRIBE", 
 		     status);
-	goto on_return;
+	if (tmp_pool) pj_pool_release(tmp_pool);
+	return;
     }
 
     pjsua_process_msg_data(tdata, NULL);
@@ -2245,16 +2077,13 @@ pj_status_t pjsua_start_mwi(pjsua_acc_id acc_id, pj_bool_t force_renew)
 	acc->mwi_dlg = NULL;
 	pjsua_perror(THIS_FILE, "Unable to send initial MWI SUBSCRIBE", 
 		     status);
-	goto on_return;
+	if (tmp_pool) pj_pool_release(tmp_pool);
+	return;
     }
 
     pjsip_dlg_dec_lock(acc->mwi_dlg);
-
-on_return:
     if (tmp_pool) pj_pool_release(tmp_pool);
 
-    pj_log_pop_indent();
-    return status;
 }
 
 
@@ -2284,10 +2113,6 @@ static pj_bool_t unsolicited_mwi_on_rx_request(pjsip_rx_data *rdata)
 	return PJ_FALSE;
     }
 
-    PJ_LOG(4,(THIS_FILE, "Got unsolicited NOTIFY from %s:%d..",
-	      rdata->pkt_info.src_name, rdata->pkt_info.src_port));
-    pj_log_push_indent();
-
     /* Got unsolicited MWI request, respond with 200/OK first */
     pjsip_endpt_respond(pjsua_get_pjsip_endpt(), NULL, rdata, 200, NULL,
 			NULL, NULL, NULL);
@@ -2306,7 +2131,7 @@ static pj_bool_t unsolicited_mwi_on_rx_request(pjsip_rx_data *rdata)
 	(*pjsua_var.ua_cfg.cb.on_mwi_info)(acc_id, &mwi_info);
     }
 
-    pj_log_pop_indent();
+    
     return PJ_TRUE;
 }
 
@@ -2368,7 +2193,7 @@ static void pres_timer_cb(pj_timer_heap_t *th,
 
 	/* Re-subscribe MWI subscription if it's terminated prematurely */
 	if (acc->cfg.mwi_enabled && !acc->mwi_sub)
-	    pjsua_start_mwi(acc->index, PJ_FALSE);
+	    pjsua_start_mwi(acc);
     }
 
     /* #937: No need to do bulk client refresh, as buddies have their
@@ -2440,7 +2265,6 @@ void pjsua_pres_shutdown(unsigned flags)
     unsigned i;
 
     PJ_LOG(4,(THIS_FILE, "Shutting down presence.."));
-    pj_log_push_indent();
 
     if (pjsua_var.pres_timer.id != 0) {
 	pjsip_endpt_cancel_timer(pjsua_var.endpt, &pjsua_var.pres_timer);
@@ -2465,6 +2289,4 @@ void pjsua_pres_shutdown(unsigned flags)
 		pjsua_pres_update_acc(i, PJ_FALSE);
 	}
     }
-
-    pj_log_pop_indent();
 }

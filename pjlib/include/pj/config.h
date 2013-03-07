@@ -20,7 +20,6 @@
 #ifndef __PJ_CONFIG_H__
 #define __PJ_CONFIG_H__
 
-
 /**
  * @file config.h
  * @brief PJLIB Main configuration settings.
@@ -45,10 +44,6 @@
 #  error "Unknown compiler."
 #endif
 
-/* PJ_ALIGN_DATA is compiler specific directive to align data address */
-#ifndef PJ_ALIGN_DATA
-#  error "PJ_ALIGN_DATA is not defined!"
-#endif
 
 /********************************************************************
  * Include target OS specific configuration.
@@ -407,33 +402,6 @@
 #  define PJ_LOG_USE_STACK_BUFFER   1
 #endif
 
-/**
- * Enable log indentation feature.
- *
- * Default: 1
- */
-#ifndef PJ_LOG_ENABLE_INDENT
-#   define PJ_LOG_ENABLE_INDENT        1
-#endif
-
-/**
- * Number of PJ_LOG_INDENT_CHAR to put every time pj_log_push_indent()
- * is called.
- *
- * Default: 1
- */
-#ifndef PJ_LOG_INDENT_SIZE
-#   define PJ_LOG_INDENT_SIZE        1
-#endif
-
-/**
- * Log indentation character.
- *
- * Default: space
- */
-#ifndef PJ_LOG_INDENT_CHAR
-#   define PJ_LOG_INDENT_CHAR	    '.'
-#endif
 
 /**
  * Colorfull terminal (for logging etc).
@@ -471,27 +439,6 @@
  */
 #ifndef PJ_POOL_DEBUG
 #  define PJ_POOL_DEBUG		    0
-#endif
-
-
-/**
- * Enable timer heap debugging facility. When this is enabled, application
- * can call pj_timer_heap_dump() to show the contents of the timer heap
- * along with the source location where the timer entries were scheduled.
- * See https://trac.pjsip.org/repos/ticket/1527 for more info.
- *
- * Default: 0
- */
-#ifndef PJ_TIMER_DEBUG
-#  define PJ_TIMER_DEBUG	    0
-#endif
-
-
-/**
- * Set this to 1 to enable debugging on the group lock. Default: 0
- */
-#ifndef PJ_GRP_LOCK_DEBUG
-#  define PJ_GRP_LOCK_DEBUG	0
 #endif
 
 
@@ -1130,14 +1077,6 @@
 #endif
 
 /**
- * Simulate race condition by sleeping the thread in strategic locations.
- * Default: no!
- */
-#ifndef PJ_RACE_ME
-#  define PJ_RACE_ME(x)
-#endif
-
-/**
  * Function attributes to inform that the function may throw exception.
  *
  * @param x     The exception list, enclosed in parenthesis.
@@ -1180,19 +1119,19 @@
 PJ_BEGIN_DECL
 
 /** PJLIB version major number. */
-#define PJ_VERSION_NUM_MAJOR	2
+#define PJ_VERSION_NUM_MAJOR	1
 
 /** PJLIB version minor number. */
-#define PJ_VERSION_NUM_MINOR	1
+#define PJ_VERSION_NUM_MINOR	16
 
 /** PJLIB version revision number. */
 #define PJ_VERSION_NUM_REV	0
 
 /**
- * Extra suffix for the version (e.g. "-trunk"), or empty for
+ * Extra suffix for the version (e.g. "-svn"), or empty for
  * web release version.
  */
-#define PJ_VERSION_NUM_EXTRA	"-svn"
+#define PJ_VERSION_NUM_EXTRA	""
 
 /**
  * PJLIB version number consists of three bytes with the following format:

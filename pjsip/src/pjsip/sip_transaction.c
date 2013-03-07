@@ -27,7 +27,6 @@
 #include <pj/hash.h>
 #include <pj/pool.h>
 #include <pj/os.h>
-#include <pj/rand.h>
 #include <pj/string.h>
 #include <pj/assert.h>
 #include <pj/guid.h>
@@ -91,6 +90,9 @@ static struct mod_tsx_layer
     }
 };
 
+/* Thread Local Storage ID for transaction lock */
+static long pjsip_tsx_lock_tls_id;
+
 /* Transaction state names */
 static const char *state_str[] = 
 {
@@ -121,6 +123,14 @@ enum
     TSX_HAS_RESOLVED_SERVER	= 16,
 };
 
+/* Transaction lock. */
+typedef struct tsx_lock_data {
+    struct tsx_lock_data *prev;
+    pjsip_transaction    *tsx;
+    int			  is_alive;
+} tsx_lock_data;
+
+
 /* Timer timeout value constants */
 static pj_time_val t1_timer_val = { PJSIP_T1_TIMEOUT/1000, 
                                     PJSIP_T1_TIMEOUT%1000 };
@@ -138,6 +148,9 @@ static pj_time_val timeout_timer_val = { (64*PJSIP_T1_TIMEOUT)/1000,
 
 
 /* Prototypes. */
+static void	   lock_tsx(pjsip_transaction *tsx, struct tsx_lock_data *lck);
+static pj_status_t unlock_tsx( pjsip_transaction *tsx, 
+                               struct tsx_lock_data *lck);
 static pj_status_t tsx_on_state_null(		pjsip_transaction *tsx, 
 				                pjsip_event *event);
 static pj_status_t tsx_on_state_calling(	pjsip_transaction *tsx, 
@@ -165,10 +178,8 @@ static void	   tsx_tp_state_callback(
 				       pjsip_transport_state state,
 				       const pjsip_transport_state_info *info);
 static pj_status_t tsx_create( pjsip_module *tsx_user,
-                               pj_grp_lock_t *grp_lock,
 			       pjsip_transaction **p_tsx);
-static void	   tsx_on_destroy(void *arg);
-static pj_status_t tsx_shutdown( pjsip_transaction *tsx );
+static pj_status_t tsx_destroy( pjsip_transaction *tsx );
 static void	   tsx_resched_retransmission( pjsip_transaction *tsx );
 static pj_status_t tsx_retransmit( pjsip_transaction *tsx, int resched);
 static int         tsx_send_msg( pjsip_transaction *tsx, 
@@ -259,9 +270,10 @@ static pj_status_t create_tsx_key_2543( pj_pool_t *pool,
 			                const pjsip_rx_data *rdata )
 {
 #define SEPARATOR   '$'
-    char *key, *p;
+    char *key, *p, *end;
     int len;
     pj_size_t len_required;
+    pjsip_uri *req_uri;
     pj_str_t *host;
 
     PJ_ASSERT_RETURN(pool && str && method && rdata, PJ_EINVAL);
@@ -271,6 +283,7 @@ static pj_status_t create_tsx_key_2543( pj_pool_t *pool,
     PJ_ASSERT_RETURN(rdata->msg_info.from, PJSIP_EMISSINGHDR);
 
     host = &rdata->msg_info.via->sent_by.host;
+    req_uri = (pjsip_uri*)rdata->msg_info.msg->line.req.uri;
 
     /* Calculate length required. */
     len_required = 9 +			    /* CSeq number */
@@ -280,6 +293,7 @@ static pj_status_t create_tsx_key_2543( pj_pool_t *pool,
 		   9 +			    /* Via port. */
 		   16;			    /* Separator+Allowance. */
     key = p = (char*) pj_pool_alloc(pool, len_required);
+    end = p + len_required;
 
     /* Add role. */
     *p++ = (char)(role==PJSIP_ROLE_UAC ? 'c' : 's');
@@ -437,6 +451,13 @@ PJ_DEF(pj_status_t) pjsip_tsx_layer_init_module(pjsip_endpoint *endpt)
     //timeout_timer_val.msec = (64 * pjsip_cfg()->tsx.t1) % 1000;
     timeout_timer_val = td_timer_val;
 
+    /* Initialize TLS ID for transaction lock. */
+    status = pj_thread_local_alloc(&pjsip_tsx_lock_tls_id);
+    if (status != PJ_SUCCESS)
+	return status;
+
+    pj_thread_local_set(pjsip_tsx_lock_tls_id, NULL);
+
     /*
      * Initialize transaction layer structure.
      */
@@ -461,7 +482,7 @@ PJ_DEF(pj_status_t) pjsip_tsx_layer_init_module(pjsip_endpoint *endpt)
 	return PJ_ENOMEM;
     }
 
-    /* Create group lock. */
+    /* Create mutex. */
     status = pj_mutex_create_recursive(pool, "tsxlayer", &mod_tsx_layer.mutex);
     if (status != PJ_SUCCESS) {
 	pjsip_endpt_release_pool(endpt, pool);
@@ -644,10 +665,8 @@ PJ_DEF(pjsip_transaction*) pjsip_tsx_layer_find_tsx( const pj_str_t *key,
      * Transaction may gets deleted before we have chance to lock it.
      */
     PJ_TODO(FIX_RACE_CONDITION_HERE);
-    PJ_RACE_ME(5);
-
     if (tsx && lock)
-	pj_grp_lock_acquire(tsx->grp_lock);
+	pj_mutex_lock(tsx->mutex);
 
     return tsx;
 }
@@ -692,7 +711,7 @@ static pj_status_t mod_tsx_layer_stop(void)
 	if (tsx) {
 	    pjsip_tsx_terminate(tsx, PJSIP_SC_SERVICE_UNAVAILABLE);
 	    mod_tsx_layer_unregister_tsx(tsx);
-	    tsx_shutdown(tsx);
+	    tsx_destroy(tsx);
 	}
 	it = next;
     }
@@ -715,6 +734,9 @@ static void tsx_layer_destroy(pjsip_endpoint *endpt)
 
     /* Release pool. */
     pjsip_endpt_release_pool(mod_tsx_layer.endpt, mod_tsx_layer.pool);
+
+    /* Free TLS */
+    pj_thread_local_free(pjsip_tsx_lock_tls_id);
 
     /* Mark as unregistered. */
     mod_tsx_layer.endpt = NULL;
@@ -791,7 +813,6 @@ static pj_bool_t mod_tsx_layer_on_rx_request(pjsip_rx_data *rdata)
      * in pjsip_tsx_recv_msg().
      */
     PJ_TODO(FIX_RACE_CONDITION_HERE);
-    PJ_RACE_ME(5);
 
     /* Pass the message to the transaction. */
     pjsip_tsx_recv_msg(tsx, rdata );
@@ -841,7 +862,6 @@ static pj_bool_t mod_tsx_layer_on_rx_response(pjsip_rx_data *rdata)
      * in pjsip_tsx_recv_msg().
      */
     PJ_TODO(FIX_RACE_CONDITION_HERE);
-    PJ_RACE_ME(5);
 
     /* Pass the message to the transaction. */
     pjsip_tsx_recv_msg(tsx, rdata );
@@ -908,6 +928,43 @@ PJ_DEF(void) pjsip_tsx_layer_dump(pj_bool_t detail)
  **
  *****************************************************************************
  **/
+/*
+ * Lock transaction and set the value of Thread Local Storage.
+ */
+static void lock_tsx(pjsip_transaction *tsx, struct tsx_lock_data *lck)
+{
+    struct tsx_lock_data *prev_data;
+
+    pj_mutex_lock(tsx->mutex);
+    prev_data = (struct tsx_lock_data *) 
+                    pj_thread_local_get(pjsip_tsx_lock_tls_id);
+    lck->prev = prev_data;
+    lck->tsx = tsx;
+    lck->is_alive = 1;
+    pj_thread_local_set(pjsip_tsx_lock_tls_id, lck);
+}
+
+
+/*
+ * Unlock transaction.
+ * This will selectively unlock the mutex ONLY IF the transaction has not been 
+ * destroyed. The function knows whether the transaction has been destroyed
+ * because when transaction is destroyed the is_alive flag for the transaction
+ * will be set to zero.
+ */
+static pj_status_t unlock_tsx( pjsip_transaction *tsx, 
+                               struct tsx_lock_data *lck)
+{
+    pj_assert( (void*)pj_thread_local_get(pjsip_tsx_lock_tls_id) == lck);
+    pj_assert( lck->tsx == tsx );
+    pj_thread_local_set(pjsip_tsx_lock_tls_id, lck->prev);
+    if (lck->is_alive)
+	pj_mutex_unlock(tsx->mutex);
+
+    return lck->is_alive ? PJ_SUCCESS : PJSIP_ETSXDESTROYED;
+}
+
+
 /* Lock transaction for accessing the timeout timer only. */
 static void lock_timer(pjsip_transaction *tsx)
 {
@@ -924,7 +981,6 @@ static void unlock_timer(pjsip_transaction *tsx)
  * This function is called by both UAC and UAS creation.
  */
 static pj_status_t tsx_create( pjsip_module *tsx_user,
-                               pj_grp_lock_t *grp_lock,
 			       pjsip_transaction **p_tsx)
 {
     pj_pool_t *pool;
@@ -953,22 +1009,16 @@ static pj_status_t tsx_create( pjsip_module *tsx_user,
     tsx->timeout_timer.user_data = tsx;
     tsx->timeout_timer.cb = &tsx_timer_callback;
     
-    if (grp_lock) {
-	tsx->grp_lock = grp_lock;
-    } else {
-	status = pj_grp_lock_create(pool, NULL, &tsx->grp_lock);
-	if (status != PJ_SUCCESS) {
-	    pjsip_endpt_release_pool(mod_tsx_layer.endpt, pool);
-	    return status;
-	}
+    status = pj_mutex_create_recursive(pool, tsx->obj_name, &tsx->mutex);
+    if (status != PJ_SUCCESS) {
+	pjsip_endpt_release_pool(mod_tsx_layer.endpt, pool);
+	return status;
     }
-
-    pj_grp_lock_add_ref(tsx->grp_lock);
-    pj_grp_lock_add_handler(tsx->grp_lock, tsx->pool, tsx, &tsx_on_destroy);
 
     status = pj_mutex_create_simple(pool, tsx->obj_name, &tsx->mutex_b);
     if (status != PJ_SUCCESS) {
-	tsx_shutdown(tsx);
+	pj_mutex_destroy(tsx->mutex);
+	pjsip_endpt_release_pool(mod_tsx_layer.endpt, pool);
 	return status;
     }
 
@@ -976,28 +1026,17 @@ static pj_status_t tsx_create( pjsip_module *tsx_user,
     return PJ_SUCCESS;
 }
 
-/* Really destroy transaction, when grp_lock reference is zero */
-static void tsx_on_destroy( void *arg )
+
+/* Destroy transaction. */
+static pj_status_t tsx_destroy( pjsip_transaction *tsx )
 {
-    pjsip_transaction *tsx = (pjsip_transaction*)arg;
+    struct tsx_lock_data *lck;
 
-    PJ_LOG(5,(tsx->obj_name, "Transaction destroyed!"));
-
-    pj_mutex_destroy(tsx->mutex_b);
-    pjsip_endpt_release_pool(tsx->endpt, tsx->pool);
-}
-
-/* Shutdown transaction. */
-static pj_status_t tsx_shutdown( pjsip_transaction *tsx )
-{
     /* Release the transport */
     tsx_update_transport(tsx, NULL);
 
-    /* Decrement reference counter in transport selector, only if
-     * we haven't been called before */
-    if (!tsx->terminating) {
-	pjsip_tpselector_dec_ref(&tsx->tp_sel);
-    }
+    /* Decrement reference counter in transport selector */
+    pjsip_tpselector_dec_ref(&tsx->tp_sel);
 
     /* Free last transmitted message. */
     if (tsx->last_tx) {
@@ -1018,21 +1057,30 @@ static pj_status_t tsx_shutdown( pjsip_transaction *tsx )
     /* Clear some pending flags. */
     tsx->transport_flag &= ~(TSX_HAS_PENDING_RESCHED | TSX_HAS_PENDING_SEND);
 
-
     /* Refuse to destroy transaction if it has pending resolving. */
     if (tsx->transport_flag & TSX_HAS_PENDING_TRANSPORT) {
 	tsx->transport_flag |= TSX_HAS_PENDING_DESTROY;
 	tsx->tsx_user = NULL;
 	PJ_LOG(4,(tsx->obj_name, "Will destroy later because transport is "
 				 "in progress"));
+	return PJ_EBUSY;
     }
 
-    if (!tsx->terminating) {
-	tsx->terminating = PJ_TRUE;
-	pj_grp_lock_dec_ref(tsx->grp_lock);
+    /* Clear TLS, so that mutex will not be unlocked */
+    lck = (struct tsx_lock_data*) pj_thread_local_get(pjsip_tsx_lock_tls_id);
+    while (lck) {
+	if (lck->tsx == tsx) {
+	    lck->is_alive = 0;
+	}
+	lck = lck->prev;
     }
 
-    /* No acccess to tsx after this, it may have been destroyed */
+    pj_mutex_destroy(tsx->mutex_b);
+    pj_mutex_destroy(tsx->mutex);
+
+    PJ_LOG(5,(tsx->obj_name, "Transaction destroyed!"));
+
+    pjsip_endpt_release_pool(tsx->endpt, tsx->pool);
 
     return PJ_SUCCESS;
 }
@@ -1045,6 +1093,7 @@ static void tsx_timer_callback( pj_timer_heap_t *theap, pj_timer_entry *entry)
 {
     pjsip_event event;
     pjsip_transaction *tsx = (pjsip_transaction*) entry->user_data;
+    struct tsx_lock_data lck;
 
     PJ_UNUSED_ARG(theap);
 
@@ -1052,17 +1101,14 @@ static void tsx_timer_callback( pj_timer_heap_t *theap, pj_timer_entry *entry)
     
     PJ_LOG(5,(tsx->obj_name, "%s timer event", 
 	     (entry==&tsx->retransmit_timer ? "Retransmit":"Timeout")));
-    pj_log_push_indent();
 
 
     PJSIP_EVENT_INIT_TIMER(event, entry);
 
     /* Dispatch event to transaction. */
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
     (*tsx->state_handler)(tsx, &event);
-    pj_grp_lock_release(tsx->grp_lock);
-
-    pj_log_pop_indent();
+    unlock_tsx(tsx, &lck);
 }
 
 
@@ -1082,7 +1128,6 @@ static void tsx_set_state( pjsip_transaction *tsx,
     PJ_LOG(5, (tsx->obj_name, "State changed from %s to %s, event=%s",
 	       state_str[tsx->state], state_str[state], 
                pjsip_event_str(event_src_type)));
-    pj_log_push_indent();
 
     /* Change state. */
     tsx->state = state;
@@ -1159,10 +1204,8 @@ static void tsx_set_state( pjsip_transaction *tsx,
 	mod_tsx_layer_unregister_tsx(tsx);
 
 	/* Destroy transaction. */
-	tsx_shutdown(tsx);
+	tsx_destroy(tsx);
     }
-
-    pj_log_pop_indent();
 }
 
 
@@ -1173,19 +1216,12 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uac( pjsip_module *tsx_user,
 					  pjsip_tx_data *tdata,
 					  pjsip_transaction **p_tsx)
 {
-    return pjsip_tsx_create_uac2(tsx_user, tdata, NULL, p_tsx);
-}
-
-PJ_DEF(pj_status_t) pjsip_tsx_create_uac2(pjsip_module *tsx_user,
-					  pjsip_tx_data *tdata,
-					  pj_grp_lock_t *grp_lock,
-					  pjsip_transaction **p_tsx)
-{
     pjsip_transaction *tsx;
     pjsip_msg *msg;
     pjsip_cseq_hdr *cseq;
     pjsip_via_hdr *via;
     pjsip_host_info dst_info;
+    struct tsx_lock_data lck;
     pj_status_t status;
 
     /* Validate arguments. */
@@ -1209,13 +1245,13 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uac2(pjsip_module *tsx_user,
 
 
     /* Create transaction instance. */
-    status = tsx_create( tsx_user, grp_lock, &tsx);
+    status = tsx_create( tsx_user, &tsx);
     if (status != PJ_SUCCESS)
 	return status;
 
 
     /* Lock transaction. */
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
 
     /* Role is UAC. */
     tsx->role = PJSIP_ROLE_UAC;
@@ -1281,8 +1317,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uac2(pjsip_module *tsx_user,
      */
     status = pjsip_get_request_dest(tdata, &dst_info);
     if (status != PJ_SUCCESS) {
-	pj_grp_lock_release(tsx->grp_lock);
-	tsx_shutdown(tsx);
+	unlock_tsx(tsx, &lck);
+	tsx_destroy(tsx);
 	return status;
     }
     tsx->is_reliable = (dst_info.flag & PJSIP_TRANSPORT_RELIABLE);
@@ -1293,19 +1329,17 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uac2(pjsip_module *tsx_user,
 	/* The assertion is removed by #1090:
 	pj_assert(!"Bug in branch_param generator (i.e. not unique)");
 	*/
-	pj_grp_lock_release(tsx->grp_lock);
-	tsx_shutdown(tsx);
+	unlock_tsx(tsx, &lck);
+	tsx_destroy(tsx);
 	return status;
     }
 
 
     /* Unlock transaction and return. */
-    pj_grp_lock_release(tsx->grp_lock);
+    unlock_tsx(tsx, &lck);
 
-    pj_log_push_indent();
     PJ_LOG(5,(tsx->obj_name, "Transaction created for %s",
 	      pjsip_tx_data_get_info(tdata)));
-    pj_log_pop_indent();
 
     *p_tsx = tsx;
     return PJ_SUCCESS;
@@ -1319,19 +1353,12 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas( pjsip_module *tsx_user,
 					  pjsip_rx_data *rdata,
 					  pjsip_transaction **p_tsx)
 {
-    return pjsip_tsx_create_uas2(tsx_user, rdata, NULL, p_tsx);
-}
-
-PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
-					  pjsip_rx_data *rdata,
-					  pj_grp_lock_t *grp_lock,
-					  pjsip_transaction **p_tsx)
-{
     pjsip_transaction *tsx;
     pjsip_msg *msg;
     pj_str_t *branch;
     pjsip_cseq_hdr *cseq;
     pj_status_t status;
+    struct tsx_lock_data lck;
 
     /* Validate arguments. */
     PJ_ASSERT_RETURN(rdata && rdata->msg_info.msg && p_tsx, PJ_EINVAL);
@@ -1369,13 +1396,13 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
     /* 
      * Create transaction instance. 
      */
-    status = tsx_create( tsx_user, grp_lock, &tsx);
+    status = tsx_create( tsx_user, &tsx);
     if (status != PJ_SUCCESS)
 	return status;
 
 
     /* Lock transaction. */
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
 
     /* Role is UAS */
     tsx->role = PJSIP_ROLE_UAS;
@@ -1392,8 +1419,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
     status = pjsip_tsx_create_key(tsx->pool, &tsx->transaction_key, 
                                   PJSIP_ROLE_UAS, &tsx->method, rdata);
     if (status != PJ_SUCCESS) {
-	pj_grp_lock_release(tsx->grp_lock);
-	tsx_shutdown(tsx);
+	unlock_tsx(tsx, &lck);
+        tsx_destroy(tsx);
         return status;
     }
 
@@ -1419,8 +1446,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
     /* Get response address. */
     status = pjsip_get_response_addr( tsx->pool, rdata, &tsx->res_addr );
     if (status != PJ_SUCCESS) {
-	pj_grp_lock_release(tsx->grp_lock);
-	tsx_shutdown(tsx);
+	unlock_tsx(tsx, &lck);
+	tsx_destroy(tsx);
 	return status;
     }
 
@@ -1441,8 +1468,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
     /* Register the transaction. */
     status = mod_tsx_layer_register_tsx(tsx);
     if (status != PJ_SUCCESS) {
-	pj_grp_lock_release(tsx->grp_lock);
-	tsx_shutdown(tsx);
+	unlock_tsx(tsx, &lck);
+	tsx_destroy(tsx);
 	return status;
     }
 
@@ -1450,12 +1477,11 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
     rdata->endpt_info.mod_data[mod_tsx_layer.mod.id] = tsx;
 
     /* Unlock transaction and return. */
-    pj_grp_lock_release(tsx->grp_lock);
+    unlock_tsx(tsx, &lck);
 
-    pj_log_push_indent();
+
     PJ_LOG(5,(tsx->obj_name, "Transaction created for %s",
 	      pjsip_rx_data_get_info(rdata)));
-    pj_log_pop_indent();
 
 
     *p_tsx = tsx;
@@ -1469,11 +1495,13 @@ PJ_DEF(pj_status_t) pjsip_tsx_create_uas2(pjsip_module *tsx_user,
 PJ_DEF(pj_status_t) pjsip_tsx_set_transport(pjsip_transaction *tsx,
 					    const pjsip_tpselector *sel)
 {
+    struct tsx_lock_data lck;
+
     /* Must be UAC transaction */
     PJ_ASSERT_RETURN(tsx && sel, PJ_EINVAL);
 
     /* Start locking the transaction. */
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
 
     /* Decrement reference counter of previous transport selector */
     pjsip_tpselector_dec_ref(&tsx->tp_sel);
@@ -1485,7 +1513,7 @@ PJ_DEF(pj_status_t) pjsip_tsx_set_transport(pjsip_transaction *tsx,
     pjsip_tpselector_add_ref(&tsx->tp_sel);
 
     /* Unlock transaction. */
-    pj_grp_lock_release(tsx->grp_lock);
+    unlock_tsx(tsx, &lck);
 
     return PJ_SUCCESS;
 }
@@ -1510,6 +1538,8 @@ static void tsx_set_status_code(pjsip_transaction *tsx,
  */
 PJ_DEF(pj_status_t) pjsip_tsx_terminate( pjsip_transaction *tsx, int code )
 {
+    struct tsx_lock_data lck;
+
     PJ_ASSERT_RETURN(tsx != NULL, PJ_EINVAL);
 
     PJ_LOG(5,(tsx->obj_name, "Request to terminate transaction"));
@@ -1519,14 +1549,10 @@ PJ_DEF(pj_status_t) pjsip_tsx_terminate( pjsip_transaction *tsx, int code )
     if (tsx->state >= PJSIP_TSX_STATE_TERMINATED)
 	return PJ_SUCCESS;
 
-    pj_log_push_indent();
-
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
     tsx_set_status_code(tsx, code, NULL);
     tsx_set_state( tsx, PJSIP_TSX_STATE_TERMINATED, PJSIP_EVENT_USER, NULL);
-    pj_grp_lock_release(tsx->grp_lock);
-
-    pj_log_pop_indent();
+    unlock_tsx(tsx, &lck);
 
     return PJ_SUCCESS;
 }
@@ -1539,6 +1565,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_terminate( pjsip_transaction *tsx, int code )
  */
 PJ_DEF(pj_status_t) pjsip_tsx_stop_retransmit(pjsip_transaction *tsx)
 {
+    struct tsx_lock_data lck;
+
     PJ_ASSERT_RETURN(tsx != NULL, PJ_EINVAL);
     PJ_ASSERT_RETURN(tsx->role == PJSIP_ROLE_UAC &&
 		     tsx->method.id == PJSIP_INVITE_METHOD,
@@ -1546,17 +1574,13 @@ PJ_DEF(pj_status_t) pjsip_tsx_stop_retransmit(pjsip_transaction *tsx)
 
     PJ_LOG(5,(tsx->obj_name, "Request to stop retransmission"));
 
-    pj_log_push_indent();
-
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
     /* Cancel retransmission timer. */
     if (tsx->retransmit_timer.id != 0) {
 	pjsip_endpt_cancel_timer(tsx->endpt, &tsx->retransmit_timer);
 	tsx->retransmit_timer.id = 0;
     }
-    pj_grp_lock_release(tsx->grp_lock);
-
-    pj_log_pop_indent();
+    unlock_tsx(tsx, &lck);
 
     return PJ_SUCCESS;
 }
@@ -1576,8 +1600,8 @@ PJ_DEF(pj_status_t) pjsip_tsx_set_timeout( pjsip_transaction *tsx,
 		     tsx->method.id == PJSIP_INVITE_METHOD,
 		     PJ_EINVALIDOP);
 
-    /* Note: must not call pj_grp_lock_acquire(tsx->grp_lock) as
-     * that would introduce deadlock. See #1121.
+    /* Note: must not call lock_tsx() as that would introduce deadlock.
+     * See #1121.
      */
     lock_timer(tsx);
 
@@ -1618,6 +1642,7 @@ PJ_DEF(pj_status_t) pjsip_tsx_send_msg( pjsip_transaction *tsx,
 				        pjsip_tx_data *tdata )
 {
     pjsip_event event;
+    struct tsx_lock_data lck;
     pj_status_t status;
 
     if (tdata == NULL)
@@ -1628,12 +1653,11 @@ PJ_DEF(pj_status_t) pjsip_tsx_send_msg( pjsip_transaction *tsx,
     PJ_LOG(5,(tsx->obj_name, "Sending %s in state %s",
                              pjsip_tx_data_get_info(tdata),
 			     state_str[tsx->state]));
-    pj_log_push_indent();
 
     PJSIP_EVENT_INIT_TX_MSG(event, tdata);
 
     /* Dispatch to transaction. */
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
 
     /* Set transport selector to tdata */
     pjsip_tx_data_set_transport(tdata, &tsx->tp_sel);
@@ -1641,7 +1665,7 @@ PJ_DEF(pj_status_t) pjsip_tsx_send_msg( pjsip_transaction *tsx,
     /* Dispatch to state handler */
     status = (*tsx->state_handler)(tsx, &event);
 
-    pj_grp_lock_release(tsx->grp_lock);
+    unlock_tsx(tsx, &lck);
 
     /* Only decrement reference counter when it returns success.
      * (This is the specification from the .PDF design document).
@@ -1649,8 +1673,6 @@ PJ_DEF(pj_status_t) pjsip_tsx_send_msg( pjsip_transaction *tsx,
     if (status == PJ_SUCCESS) {
 	pjsip_tx_data_dec_ref(tdata);
     }
-
-    pj_log_pop_indent();
 
     return status;
 }
@@ -1664,10 +1686,11 @@ PJ_DEF(void) pjsip_tsx_recv_msg( pjsip_transaction *tsx,
 				 pjsip_rx_data *rdata)
 {
     pjsip_event event;
+    struct tsx_lock_data lck;
+    pj_status_t status;
 
     PJ_LOG(5,(tsx->obj_name, "Incoming %s in state %s", 
 	      pjsip_rx_data_get_info(rdata), state_str[tsx->state]));
-    pj_log_push_indent();
 
     /* Put the transaction in the rdata's mod_data. */
     rdata->endpt_info.mod_data[mod_tsx_layer.mod.id] = tsx;
@@ -1676,11 +1699,9 @@ PJ_DEF(void) pjsip_tsx_recv_msg( pjsip_transaction *tsx,
     PJSIP_EVENT_INIT_RX_MSG(event, rdata);
 
     /* Dispatch to transaction. */
-    pj_grp_lock_acquire(tsx->grp_lock);
-    (*tsx->state_handler)(tsx, &event);
-    pj_grp_lock_release(tsx->grp_lock);
-
-    pj_log_pop_indent();
+    lock_tsx(tsx, &lck);
+    status = (*tsx->state_handler)(tsx, &event);
+    unlock_tsx(tsx, &lck);
 }
 
 
@@ -1690,6 +1711,7 @@ static void send_msg_callback( pjsip_send_state *send_state,
 {
     pjsip_transaction *tsx = (pjsip_transaction*) send_state->token;
     pjsip_tx_data *tdata = send_state->tdata;
+    struct tsx_lock_data lck;
 
     /* Check if transaction has cancelled itself from this transmit
      * notification (https://trac.pjsip.org/repos/ticket/1033).
@@ -1703,11 +1725,11 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	return;
     }
 
-    pj_grp_lock_acquire(tsx->grp_lock);
-
     /* Reset */
     tdata->mod_data[mod_tsx_layer.mod.id] = NULL;
     tsx->pending_tx = NULL;
+
+    lock_tsx(tsx, &lck);
 
     if (sent > 0) {
 	/* Successfully sent! */
@@ -1737,7 +1759,7 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	if (tsx->transport_flag & TSX_HAS_PENDING_DESTROY) {
 	    tsx_set_state( tsx, PJSIP_TSX_STATE_DESTROYED, 
 			   PJSIP_EVENT_UNKNOWN, NULL );
-	    pj_grp_lock_release(tsx->grp_lock);
+	    unlock_tsx(tsx, &lck);
 	    return;
 	}
 
@@ -1779,7 +1801,7 @@ static void send_msg_callback( pjsip_send_state *send_state,
 
 	    err =pj_strerror(-sent, errmsg, sizeof(errmsg));
 
-	    PJ_LOG(2,(tsx->obj_name,
+	    PJ_LOG(2,(tsx->obj_name, 
 		      "Failed to send %s! err=%d (%s)",
 		      pjsip_tx_data_get_info(send_state->tdata), -sent,
 		      errmsg));
@@ -1817,10 +1839,13 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	    }
 
 	} else {
-	    PJ_PERROR(2,(tsx->obj_name, -sent,
-		         "Temporary failure in sending %s, "
-		         "will try next server",
-		         pjsip_tx_data_get_info(send_state->tdata)));
+	    char errmsg[PJ_ERR_MSG_SIZE];
+
+	    PJ_LOG(2,(tsx->obj_name, 
+		      "Temporary failure in sending %s, "
+		      "will try next server. Err=%d (%s)",
+		      pjsip_tx_data_get_info(send_state->tdata), -sent,
+		      pj_strerror(-sent, errmsg, sizeof(errmsg)).ptr));
 
 	    /* Reset retransmission count */
 	    tsx->retransmit_count = 0;
@@ -1845,7 +1870,7 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	}
     }
 
-    pj_grp_lock_release(tsx->grp_lock);
+    unlock_tsx(tsx, &lck);
 }
 
 
@@ -1855,6 +1880,7 @@ static void transport_callback(void *token, pjsip_tx_data *tdata,
 {
     if (sent < 0) {
 	pjsip_transaction *tsx = (pjsip_transaction*) token;
+	struct tsx_lock_data lck;
 	char errmsg[PJ_ERR_MSG_SIZE];
 	pj_str_t err;
 
@@ -1863,9 +1889,9 @@ static void transport_callback(void *token, pjsip_tx_data *tdata,
 	err = pj_strerror(-sent, errmsg, sizeof(errmsg));
 
 	PJ_LOG(2,(tsx->obj_name, "Transport failed to send %s! Err=%d (%s)",
-		pjsip_tx_data_get_info(tdata), -sent, errmsg));
+		  pjsip_tx_data_get_info(tdata), -sent, errmsg));
 
-	pj_grp_lock_acquire(tsx->grp_lock);
+	lock_tsx(tsx, &lck);
 
 	/* Release transport. */
 	tsx_update_transport(tsx, NULL);
@@ -1875,7 +1901,7 @@ static void transport_callback(void *token, pjsip_tx_data *tdata,
 	tsx_set_state( tsx, PJSIP_TSX_STATE_TERMINATED, 
 		       PJSIP_EVENT_TRANSPORT_ERROR, tdata );
 
-	pj_grp_lock_release(tsx->grp_lock);
+	unlock_tsx(tsx, &lck);
    }
 }
 
@@ -1891,12 +1917,13 @@ static void tsx_tp_state_callback( pjsip_transport *tp,
 
     if (state == PJSIP_TP_STATE_DISCONNECTED) {
 	pjsip_transaction *tsx;
+	struct tsx_lock_data lck;
 
 	pj_assert(tp && info && info->user_data);
 
 	tsx = (pjsip_transaction*)info->user_data;
 
-	pj_grp_lock_acquire(tsx->grp_lock);
+	lock_tsx(tsx, &lck);
 
 	/* Terminate transaction when transport disconnected */
 	if (tsx->state < PJSIP_TSX_STATE_TERMINATED) {
@@ -1909,7 +1936,7 @@ static void tsx_tp_state_callback( pjsip_transport *tp,
 			   PJSIP_EVENT_TRANSPORT_ERROR, NULL);
 	}
 
-	pj_grp_lock_release(tsx->grp_lock);
+	unlock_tsx(tsx, &lck);
     }
 }
 
@@ -1941,9 +1968,12 @@ static pj_status_t tsx_send_msg( pjsip_transaction *tsx,
 	    status = PJ_SUCCESS;
 
 	if (status != PJ_SUCCESS) {
-	    PJ_PERROR(2,(tsx->obj_name, status,
-		         "Error sending %s",
-		         pjsip_tx_data_get_info(tdata)));
+	    char errmsg[PJ_ERR_MSG_SIZE];
+
+	    PJ_LOG(2,(tsx->obj_name, 
+		      "Error sending %s: Err=%d (%s)",
+		      pjsip_tx_data_get_info(tdata), status, 
+		      pj_strerror(status, errmsg, sizeof(errmsg)).ptr));
 
 	    /* On error, release transport to force using full transport
 	     * resolution procedure.
@@ -2056,14 +2086,15 @@ static pj_status_t tsx_send_msg( pjsip_transaction *tsx,
 PJ_DEF(pj_status_t) pjsip_tsx_retransmit_no_state(pjsip_transaction *tsx,
 						  pjsip_tx_data *tdata)
 {
+    struct tsx_lock_data lck;
     pj_status_t status;
 
-    pj_grp_lock_acquire(tsx->grp_lock);
+    lock_tsx(tsx, &lck);
     if (tdata == NULL) {
 	tdata = tsx->last_tx;
     }
     status = tsx_send_msg(tsx, tdata);
-    pj_grp_lock_release(tsx->grp_lock);
+    unlock_tsx(tsx, &lck);
 
     /* Only decrement reference counter when it returns success.
      * (This is the specification from the .PDF design document).

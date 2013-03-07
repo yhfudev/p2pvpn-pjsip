@@ -74,7 +74,7 @@
       Contact: sip:sipp@[local_ip]:[local_port]
       Max-Forwards: 70
       Event: presence
-      Subscription-State: active;expires=10
+      Subscription-State: active;expires=50
       Content-Type: application/pidf+xml
 
       <?xml version="1.0" encoding="UTF-8"?>

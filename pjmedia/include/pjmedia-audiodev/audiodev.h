@@ -26,8 +26,6 @@
  */
 #include <pjmedia-audiodev/config.h>
 #include <pjmedia-audiodev/errno.h>
-#include <pjmedia/format.h>
-#include <pjmedia/frame.h>
 #include <pjmedia/types.h>
 #include <pj/pool.h>
 
@@ -423,12 +421,6 @@ typedef struct pjmedia_aud_param
      * if PJMEDIA_AUD_DEV_CAP_CNG is set in the flags.
      */
     pj_bool_t cng_enabled;
-
-    /** 
-     * Enable/disable VAD. This setting is optional, and will only be used
-     * if PJMEDIA_AUD_DEV_CAP_VAD is set in the flags.
-     */
-    pj_bool_t vad_enabled;
 
 } pjmedia_aud_param;
 

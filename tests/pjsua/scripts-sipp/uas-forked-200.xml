@@ -22,9 +22,9 @@
 <scenario name="Forked INVITE, one of them require PRACK">
   <recv request="INVITE" crlf="true">
    <action>
-    <ereg regexp="branch=([^;]*)"
+    <ereg regexp="branch=([0-9a-zA-Z]*)"
           search_in="hdr"
-          header="Via"
+	  header="Via"
           assign_to="1,2"/>
     <assign assign_to="1" variable="2"/>
     </action>
@@ -117,6 +117,21 @@
         crlf="true">
   </recv>
 
+  <!-- Receive BYE -->
+  <recv request="BYE" crlf="true">
+  </recv>
+
+  <!-- Send 200/OK to BYE -->
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+    ]]>
+  </send>
 
   <!-- definition of the response time repartition table (unit is ms)   -->
   <ResponseTimeRepartition value="10, 20, 30, 40, 50, 100, 150, 200"/>

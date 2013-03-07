@@ -18,7 +18,6 @@ tests = []
 excluded_tests = [ "svn",
 		   "pyc",
 		   "scripts-call/150_srtp_2_1",				# SRTP optional 'cannot' call SRTP mandatory
-                   "scripts-call/150_srtp_2_3.py",                      # temporarily disabled until #1267 done
 		   "scripts-call/301_ice_public_a.py",			# Unreliable, proxy returns 408 sometimes
 		   "scripts-call/301_ice_public_b.py",			# Doesn't work because OpenSER modifies SDP
 		   "scripts-pres/200_publish.py",			# Ok from cmdline, error from runall.py
@@ -55,11 +54,6 @@ for f in os.listdir("scripts-pesq"):
 for f in os.listdir("scripts-recvfrom"):
     tests.append("mod_recvfrom.py scripts-recvfrom/" + f)
 
-# Add sipp tests
-for f in os.listdir("scripts-sipp"):
-    if f.endswith(".xml"):
-	tests.append("mod_sipp.py scripts-sipp/" + f)
-
 # Filter-out excluded tests
 for pat in excluded_tests:
     tests = [t for t in tests if t.find(pat)==-1]
@@ -93,7 +87,7 @@ while len(sys.argv):
 	        if len(sys.argv) > 1:
 			resume_script=sys.argv[1]
 			sys.argv.pop(0)
-			sys.argv.pop(0)
+			sys.argv.pop(1)
 	        else:
 	                sys.argv.pop(0)
                         sys.stderr.write("Error: argument value required")
@@ -108,7 +102,7 @@ while len(sys.argv):
                 for t in tests:
                         (mod,param) = t.split(None,2)
 		        tname = mod[4:mod.find(".py")] + "_" + \
-		                param[param.find("/")+1:param.rfind(".")]
+		                param[param.find("/")+1:param.find(".py")]
 			c = ""
 			if len(sys.argv):
 				c = " ".join(sys.argv) + " "
@@ -119,18 +113,15 @@ while len(sys.argv):
                 if len(sys.argv) > 1:
 			shell_cmd = sys.argv[1]
 			sys.argv.pop(0)
-			sys.argv.pop(0)
+			sys.argv.pop(1)
                 else:
                         sys.argv.pop(0)
                         sys.stderr.write("Error: argument value required")
                         sys.exit(1)
-	else:
-		# should be run.py options
-		break
 
 
 # Generate arguments for run.py
-argv_st = " ".join(sys.argv) + " "
+argv_st = " ".join(sys.argv)
 
 # Init vars
 fails_cnt = 0
@@ -170,7 +161,6 @@ for t in tests:
 		logname = re.search(".*\s+(.*)", t).group(1)
 		logname = re.sub("[\\\/]", "_", logname)
 		logname = re.sub("\.py$", ".log", logname)
-		logname = re.sub("\.xml$", ".log", logname)
 		logname = "logs/" + logname
 		shutil.move("output.log", logname)
 		print "Please see '" + logname + "' for the test log."

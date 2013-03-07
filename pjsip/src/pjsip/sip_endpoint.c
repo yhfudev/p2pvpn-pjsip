@@ -606,9 +606,6 @@ PJ_DEF(void) pjsip_endpt_destroy(pjsip_endpoint *endpt)
     pj_ioqueue_destroy(endpt->ioqueue);
 
     /* Destroy timer heap */
-#if PJ_TIMER_DEBUG
-    pj_timer_heap_dump(endpt->timer_heap);
-#endif
     pj_timer_heap_destroy(endpt->timer_heap);
 
     /* Call all registered exit callbacks */
@@ -771,19 +768,6 @@ PJ_DEF(pj_status_t) pjsip_endpt_handle_events(pjsip_endpoint *endpt,
 /*
  * Schedule timer.
  */
-#if PJ_TIMER_DEBUG
-PJ_DEF(pj_status_t) pjsip_endpt_schedule_timer_dbg(pjsip_endpoint *endpt,
-						    pj_timer_entry *entry,
-						    const pj_time_val *delay,
-						    const char *src_file,
-						    int src_line)
-{
-    PJ_LOG(6, (THIS_FILE, "pjsip_endpt_schedule_timer(entry=%p, delay=%u.%u)",
-			 entry, delay->sec, delay->msec));
-    return pj_timer_heap_schedule_dbg(endpt->timer_heap, entry, delay,
-                                      src_file, src_line);
-}
-#else
 PJ_DEF(pj_status_t) pjsip_endpt_schedule_timer( pjsip_endpoint *endpt,
 						pj_timer_entry *entry,
 						const pj_time_val *delay )
@@ -792,7 +776,6 @@ PJ_DEF(pj_status_t) pjsip_endpt_schedule_timer( pjsip_endpoint *endpt,
 			 entry, delay->sec, delay->msec));
     return pj_timer_heap_schedule( endpt->timer_heap, entry, delay );
 }
-#endif
 
 /*
  * Cancel the previously registered timer.
@@ -812,104 +795,6 @@ PJ_DEF(pj_timer_heap_t*) pjsip_endpt_get_timer_heap(pjsip_endpoint *endpt)
     return endpt->timer_heap;
 }
 
-/* Init with default */
-PJ_DEF(void) pjsip_process_rdata_param_default(pjsip_process_rdata_param *p)
-{
-    pj_bzero(p, sizeof(*p));
-}
-
-/* Distribute rdata */
-PJ_DEF(pj_status_t) pjsip_endpt_process_rx_data( pjsip_endpoint *endpt,
-                                                 pjsip_rx_data *rdata,
-                                                 pjsip_process_rdata_param *p,
-                                                 pj_bool_t *p_handled)
-{
-    pjsip_msg *msg;
-    pjsip_process_rdata_param def_prm;
-    pjsip_module *mod;
-    pj_bool_t handled = PJ_FALSE;
-    unsigned i;
-    pj_status_t status;
-
-    PJ_ASSERT_RETURN(endpt && rdata, PJ_EINVAL);
-
-    if (p==NULL) {
-	p = &def_prm;
-	pjsip_process_rdata_param_default(p);
-    }
-
-    msg = rdata->msg_info.msg;
-
-    if (p_handled)
-	*p_handled = PJ_FALSE;
-
-    if (!p->silent) {
-	PJ_LOG(5, (THIS_FILE, "Distributing rdata to modules: %s",
-		   pjsip_rx_data_get_info(rdata)));
-	pj_log_push_indent();
-    }
-
-    LOCK_MODULE_ACCESS(endpt);
-
-    /* Find start module */
-    if (p->start_mod) {
-	mod = (pjsip_module*)
-	      pj_list_find_node(&endpt->module_list, p->start_mod);
-	if (!mod) {
-	    status = PJ_ENOTFOUND;
-	    goto on_return;
-	}
-    } else {
-	mod = endpt->module_list.next;
-    }
-
-    /* Start after the specified index */
-    for (i=0; i < p->idx_after_start && mod != &endpt->module_list; ++i) {
-	mod = mod->next;
-    }
-
-    /* Start with the specified priority */
-    while (mod != &endpt->module_list && mod->priority < (int)p->start_prio) {
-	mod = mod->next;
-    }
-
-    if (mod == &endpt->module_list) {
-	status = PJ_ENOTFOUND;
-	goto on_return;
-    }
-
-    /* Distribute */
-    if (msg->type == PJSIP_REQUEST_MSG) {
-	do {
-	    if (mod->on_rx_request)
-		handled = (*mod->on_rx_request)(rdata);
-	    if (handled)
-		break;
-	    mod = mod->next;
-	} while (mod != &endpt->module_list);
-    } else {
-	do {
-	    if (mod->on_rx_response)
-		handled = (*mod->on_rx_response)(rdata);
-	    if (handled)
-		break;
-	    mod = mod->next;
-	} while (mod != &endpt->module_list);
-    }
-
-    status = PJ_SUCCESS;
-
-on_return:
-    if (p_handled)
-	*p_handled = handled;
-
-    UNLOCK_MODULE_ACCESS(endpt);
-    if (!p->silent) {
-	pj_log_pop_indent();
-    }
-    return status;
-}
-
 /*
  * This is the callback that is called by the transport manager when it 
  * receives a message from the network.
@@ -918,8 +803,7 @@ static void endpt_on_rx_msg( pjsip_endpoint *endpt,
 				      pj_status_t status,
 				      pjsip_rx_data *rdata )
 {
-    pjsip_process_rdata_param proc_prm;
-    pj_bool_t handled = PJ_FALSE;
+    pjsip_msg *msg = rdata->msg_info.msg;
 
     if (status != PJ_SUCCESS) {
 	char info[30];
@@ -964,7 +848,6 @@ static void endpt_on_rx_msg( pjsip_endpoint *endpt,
 
     PJ_LOG(5, (THIS_FILE, "Processing incoming message: %s", 
 	       pjsip_rx_data_get_info(rdata)));
-    pj_log_push_indent();
 
 #if defined(PJSIP_CHECK_VIA_SENT_BY) && PJSIP_CHECK_VIA_SENT_BY != 0
     /* For response, check that the value in Via sent-by match the transport.
@@ -1020,32 +903,66 @@ static void endpt_on_rx_msg( pjsip_endpoint *endpt,
 				 pjsip_rx_data_get_info(rdata),
 				 rdata->pkt_info.src_name, 
 				 rdata->pkt_info.src_port));
-	    pj_log_pop_indent();
 	    return;
 	}
     }
 #endif
 
-    pjsip_process_rdata_param_default(&proc_prm);
-    proc_prm.silent = PJ_TRUE;
 
-    pjsip_endpt_process_rx_data(endpt, rdata, &proc_prm, &handled);
+    /* Distribute to modules, starting from modules with highest priority */
+    LOCK_MODULE_ACCESS(endpt);
 
-    /* No module is able to handle the message */
-    if (!handled) {
-	PJ_LOG(4,(THIS_FILE, "%s from %s:%d was dropped/unhandled by"
-			     " any modules",
-			     pjsip_rx_data_get_info(rdata),
-			     rdata->pkt_info.src_name,
-			     rdata->pkt_info.src_port));
+    if (msg->type == PJSIP_REQUEST_MSG) {
+	pjsip_module *mod;
+	pj_bool_t handled = PJ_FALSE;
+
+	mod = endpt->module_list.next;
+	while (mod != &endpt->module_list) {
+	    if (mod->on_rx_request)
+		handled = (*mod->on_rx_request)(rdata);
+	    if (handled)
+		break;
+	    mod = mod->next;
+	}
+
+	/* No module is able to handle the request. */
+	if (!handled) {
+	    PJ_TODO(ENDPT_RESPOND_UNHANDLED_REQUEST);
+	    PJ_LOG(4,(THIS_FILE, "Message %s from %s:%d was dropped/unhandled by"
+				 " any modules",
+				 pjsip_rx_data_get_info(rdata),
+				 rdata->pkt_info.src_name,
+				 rdata->pkt_info.src_port));
+	}
+
+    } else {
+	pjsip_module *mod;
+	pj_bool_t handled = PJ_FALSE;
+
+	mod = endpt->module_list.next;
+	while (mod != &endpt->module_list) {
+	    if (mod->on_rx_response)
+		handled = (*mod->on_rx_response)(rdata);
+	    if (handled)
+		break;
+	    mod = mod->next;
+	}
+
+	if (!handled) {
+	    PJ_LOG(4,(THIS_FILE, "Message %s from %s:%d was dropped/unhandled"
+				 " by any modules",
+				 pjsip_rx_data_get_info(rdata),
+				 rdata->pkt_info.src_name,
+				 rdata->pkt_info.src_port));
+	}
     }
+
+    UNLOCK_MODULE_ACCESS(endpt);
 
     /* Must clear mod_data before returning rdata to transport, since
      * rdata may be reused.
      */
     pj_bzero(&rdata->endpt_info, sizeof(rdata->endpt_info));
-
-    pj_log_pop_indent();
 }
 
 /*
@@ -1272,12 +1189,8 @@ PJ_DEF(void) pjsip_endpt_dump( pjsip_endpoint *endpt, pj_bool_t detail )
     pjsip_tpmgr_dump_transports( endpt->transport_mgr );
 
     /* Timer. */
-#if PJ_TIMER_DEBUG
-    pj_timer_heap_dump(endpt->timer_heap);
-#else
     PJ_LOG(3,(THIS_FILE, " Timer heap has %u entries", 
 			pj_timer_heap_count(endpt->timer_heap)));
-#endif
 
     /* Unlock mutex. */
     pj_mutex_unlock(endpt->mutex);

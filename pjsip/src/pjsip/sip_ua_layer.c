@@ -545,7 +545,7 @@ static struct dlg_set *find_dlg_set_for_msg( pjsip_rx_data *rdata )
 	/* We should find the dialog attached to the INVITE transaction */
 	if (tsx) {
 	    dlg = (pjsip_dialog*) tsx->mod_data[mod_ua.mod.id];
-	    pj_grp_lock_release(tsx->grp_lock);
+	    pj_mutex_unlock(tsx->mutex);
 
 	    /* Dlg may be NULL on some extreme condition
 	     * (e.g. during debugging where initially there is a dialog)
@@ -590,10 +590,6 @@ static pj_bool_t mod_ua_on_rx_request(pjsip_rx_data *rdata)
     {
 	return PJ_FALSE;
     }
-
-    /* Incoming REGISTER may have tags in it */
-    if (rdata->msg_info.msg->line.req.method.id == PJSIP_REGISTER_METHOD)
-	return PJ_FALSE;
 
 retry_on_deadlock:
 
