@@ -171,11 +171,11 @@ typedef enum pjsua_call_vid_strm_op {PJSUA_CALL_VID_STRM_NO_OP, PJSUA_CALL_VID_S
 
 typedef enum pjsua_vid_req_keyframe_method {PJSUA_VID_REQ_KEYFRAME_SIP_INFO = 1, PJSUA_VID_REQ_KEYFRAME_RTCP_PLI = 2} pjsua_vid_req_keyframe_method;
 
-typedef enum pjsua_call_flag {PJSUA_CALL_UNHOLD = 1, PJSUA_CALL_UPDATE_CONTACT = 2, PJSUA_CALL_INCLUDE_DISABLED_MEDIA = 4, PJSUA_CALL_NO_SDP_OFFER = 8, PJSUA_CALL_REINIT_MEDIA = 16, PJSUA_CALL_UPDATE_VIA = 32, PJSUA_CALL_UPDATE_TARGET = 64} pjsua_call_flag;
+typedef enum pjsua_call_flag {PJSUA_CALL_UNHOLD = 1, PJSUA_CALL_UPDATE_CONTACT = 2, PJSUA_CALL_INCLUDE_DISABLED_MEDIA = 4, PJSUA_CALL_NO_SDP_OFFER = 8, PJSUA_CALL_REINIT_MEDIA = 16, PJSUA_CALL_UPDATE_VIA = 32} pjsua_call_flag;
 
 typedef enum pjsua_create_media_transport_flag {PJSUA_MED_TP_CLOSE_MEMBER = 1} pjsua_create_media_transport_flag;
 
-typedef enum pjsua_snd_dev_id {PJSUA_SND_DEFAULT_CAPTURE_DEV = -1, PJSUA_SND_DEFAULT_PLAYBACK_DEV = -2, PJSUA_SND_NO_DEV = -3, PJSUA_SND_NULL_DEV = -99} pjsua_snd_dev_id;
+typedef enum pjsua_snd_dev_id {PJSUA_SND_DEFAULT_CAPTURE_DEV = PJMEDIA_AUD_DEFAULT_CAPTURE_DEV, PJSUA_SND_DEFAULT_PLAYBACK_DEV = PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV, PJSUA_SND_NO_DEV = PJMEDIA_AUD_INVALID_DEV, PJSUA_SND_NULL_DEV = -99} pjsua_snd_dev_id;
 
 typedef enum pjsua_snd_dev_mode {PJSUA_SND_DEV_SPEAKER_ONLY = 1, PJSUA_SND_DEV_NO_IMMEDIATE_OPEN = 2} pjsua_snd_dev_mode;
 

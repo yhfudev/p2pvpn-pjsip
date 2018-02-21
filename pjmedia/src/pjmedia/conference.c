@@ -75,20 +75,16 @@ static FILE *fhnd_rec;
  * signal level of the ports, so that sudden change in signal level
  * in the port does not cause misaligned signal (which causes noise).
  */
-#if defined(PJMEDIA_CONF_USE_AGC) && PJMEDIA_CONF_USE_AGC != 0
-#   define ATTACK_A     ((conf->clock_rate / conf->samples_per_frame) >> 4)
-#   define ATTACK_B	1
-#   define DECAY_A	0
-#   define DECAY_B	1
+#define ATTACK_A    (conf->clock_rate / conf->samples_per_frame)
+#define ATTACK_B    1
+#define DECAY_A	    0
+#define DECAY_B	    1
 
-#   define SIMPLE_AGC(last, target) \
+#define SIMPLE_AGC(last, target) \
     if (target >= last) \
 	target = (ATTACK_A*(last+1)+ATTACK_B*target)/(ATTACK_A+ATTACK_B); \
     else \
 	target = (DECAY_A*last+DECAY_B*target)/(DECAY_A+DECAY_B)
-#else
-#   define SIMPLE_AGC(last, target)
-#endif
 
 #define MAX_LEVEL   (32767)
 #define MIN_LEVEL   (-32768)
@@ -1859,10 +1855,8 @@ static pj_status_t get_frame(pjmedia_port *this_port,
 	
 	    status = pjmedia_delay_buf_get(conf_port->delay_buf,
 				  (pj_int16_t*)frame->buf);
-	    if (status != PJ_SUCCESS) {
-		conf_port->rx_level = 0;
+	    if (status != PJ_SUCCESS)
 		continue;
-	    }		
 
 	} else {
 
@@ -1882,22 +1876,16 @@ static pj_status_t get_frame(pjmedia_port *this_port,
 				     status));
 		conf_port->rx_setting = PJMEDIA_PORT_DISABLE;
 		 */
-		conf_port->rx_level = 0;
 		continue;
 	    }
 
 	    /* Check that the port is not removed when we call get_frame() */
-	    if (conf->ports[i] == NULL) {
-		conf_port->rx_level = 0;
+	    if (conf->ports[i] == NULL)
 		continue;
-	    }
-		
 
 	    /* Ignore if we didn't get any frame */
-	    if (frame_type != PJMEDIA_FRAME_TYPE_AUDIO) {
-		conf_port->rx_level = 0;
+	    if (frame_type != PJMEDIA_FRAME_TYPE_AUDIO)
 		continue;
-	    }		
 	}
 
 	p_in = (pj_int16_t*) frame->buf;
@@ -1953,6 +1941,7 @@ static pj_status_t get_frame(pjmedia_port *this_port,
 	{
 	    struct conf_port *listener;
 	    pj_int32_t *mix_buf;
+	    unsigned k;
 
 	    listener = conf->ports[conf_port->listener_slots[cj]];
 
@@ -1967,38 +1956,25 @@ static pj_status_t get_frame(pjmedia_port *this_port,
 		 * and calculate appropriate level adjustment if there is
 		 * any overflowed level in the mixed signal.
 		 */
-		unsigned k, samples_per_frame = conf->samples_per_frame;
-		pj_int32_t mix_buf_min = 0;
-		pj_int32_t mix_buf_max = 0;
-
-		for (k = 0; k < samples_per_frame; ++k) {
+		for (k=0; k < conf->samples_per_frame; ++k) {
 		    mix_buf[k] += p_in[k];
-		    if (mix_buf[k] < mix_buf_min)
-			mix_buf_min = mix_buf[k];
-		    if (mix_buf[k] > mix_buf_max)
-			mix_buf_max = mix_buf[k];
-		}
+		    /* Check if normalization adjustment needed. */
+		    if (IS_OVERFLOW(mix_buf[k])) {
+			/* NORMAL_LEVEL * MAX_LEVEL / mix_buf[k]; */
+			int tmp_adj = (MAX_LEVEL<<7) / mix_buf[k];
+			if (tmp_adj<0) tmp_adj = -tmp_adj;
 
-		/* Check if normalization adjustment needed. */
-		if (mix_buf_min < MIN_LEVEL || mix_buf_max > MAX_LEVEL) {
-		    int tmp_adj;
+			if (tmp_adj<listener->mix_adj)
+			    listener->mix_adj = tmp_adj;
 
-		    if (-mix_buf_min > mix_buf_max)
-			mix_buf_max = -mix_buf_min;
-
-		    /* NORMAL_LEVEL * MAX_LEVEL / mix_buf_max; */
-		    tmp_adj = (MAX_LEVEL<<7) / mix_buf_max;
-		    if (tmp_adj < listener->mix_adj)
-			listener->mix_adj = tmp_adj;
-		}
+		    } /* if any overflow in the mixed signals */
+		} /* loop mixing signals */
 	    } else {
 		/* Only 1 transmitter:
 		 * just copy the samples to the mix buffer
 		 * no mixing and level adjustment needed
 		 */
-		unsigned k, samples_per_frame = conf->samples_per_frame;
-
-		for (k = 0; k < samples_per_frame; ++k) {
+		for (k=0; k<conf->samples_per_frame; ++k) {
 		    mix_buf[k] = p_in[k];
 		}
 	    }

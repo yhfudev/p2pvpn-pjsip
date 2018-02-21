@@ -679,9 +679,7 @@ void AudDevManager::setCaptureDev(int capture_dev) const throw(Error)
     pjsua_snd_dev_param_default(&param);    
 
     param.capture_dev = capture_dev;
-    param.playback_dev = getPlaybackDev();
-    if (param.playback_dev == PJMEDIA_AUD_INVALID_DEV)
-        param.playback_dev = PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV;
+    param.playback_dev = getPlaybackDev();    
 
     param.mode = PJSUA_SND_DEV_NO_IMMEDIATE_OPEN;    
 
@@ -694,8 +692,6 @@ void AudDevManager::setPlaybackDev(int playback_dev) const throw(Error)
     pjsua_snd_dev_param_default(&param);    
 
     param.capture_dev = getCaptureDev();
-    if (param.capture_dev == PJMEDIA_AUD_INVALID_DEV)
-        param.capture_dev = PJMEDIA_AUD_DEFAULT_CAPTURE_DEV;
     param.playback_dev = playback_dev;
 
     param.mode = PJSUA_SND_DEV_NO_IMMEDIATE_OPEN;    
@@ -1030,76 +1026,6 @@ int AudDevManager::getActiveDev(bool is_capture) const throw(Error)
     PJSUA2_CHECK_EXPR( pjsua_get_snd_dev(&capture_dev, &playback_dev) );
 
     return is_capture?capture_dev:playback_dev;
-}
-
-
-///////////////////////////////////////////////////////////////////////////////
-ExtraAudioDevice::ExtraAudioDevice (int playdev, int recdev) :
-    playDev(playdev), recDev(recdev), ext_snd_dev(NULL)
-{ 
-}
-
-ExtraAudioDevice::~ExtraAudioDevice()
-{
-    close();
-}
-
-void ExtraAudioDevice::open()
-{
-    pj_status_t status;
-
-    /* Opened already? */
-    if (isOpened())
-	return;
-
-    /* Get port info of conference bridge master port */
-    pjsua_conf_port_info master_info;
-    status = pjsua_conf_get_port_info(0, &master_info);
-    PJSUA2_CHECK_RAISE_ERROR(status);
-
-    /* Generate sound device port param */
-    pjmedia_snd_port_param param;
-    pjmedia_snd_port_param_default(&param);
-    
-    status = pjmedia_aud_dev_default_param(recDev, &param.base);
-    PJSUA2_CHECK_RAISE_ERROR(status);
-
-    param.base.dir = PJMEDIA_DIR_CAPTURE_PLAYBACK;
-    param.base.play_id = playDev;
-    param.base.rec_id = recDev;
-    param.base.clock_rate = master_info.clock_rate;
-    param.base.channel_count = master_info.channel_count;
-    param.base.samples_per_frame = master_info.samples_per_frame;
-    param.base.bits_per_sample = master_info.bits_per_sample;
-
-    /* Create the extra sound device */
-    pjsua_ext_snd_dev *snd_dev;
-    status = pjsua_ext_snd_dev_create(&param, &snd_dev);
-    PJSUA2_CHECK_RAISE_ERROR(status);
-    ext_snd_dev = snd_dev;
-
-    /* Register to the conference bridge */
-    registerMediaPort(NULL);
-    id = pjsua_ext_snd_dev_get_conf_port(snd_dev);
-}
-
-bool ExtraAudioDevice::isOpened()
-{
-    return (id != PJSUA_INVALID_ID);
-}
-
-void ExtraAudioDevice::close()
-{
-    /* Unregister from the conference bridge */
-    id = PJSUA_INVALID_ID;
-    unregisterMediaPort();
-
-    /* Destroy the extra sound device */
-    if (ext_snd_dev) {
-	pjsua_ext_snd_dev *snd_dev = (pjsua_ext_snd_dev*)ext_snd_dev;
-	ext_snd_dev = NULL;
-	pjsua_ext_snd_dev_destroy(snd_dev);
-    }	
 }
 
 ///////////////////////////////////////////////////////////////////////////////

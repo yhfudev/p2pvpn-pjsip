@@ -22,11 +22,8 @@
 #include <pj/string.h>
 #include <pj/except.h>
 #include <pj/os.h>
-#include <pj/log.h>
 #include <pj/errno.h>
 #include <pj/assert.h>
-
-#define THIS_FILE   "scanner.c"
 
 #define PJ_SCAN_IS_SPACE(c)		((c)==' ' || (c)=='\t')
 #define PJ_SCAN_IS_NEWLINE(c)		((c)=='\r' || (c)=='\n')

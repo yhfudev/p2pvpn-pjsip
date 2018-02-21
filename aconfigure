@@ -642,12 +642,9 @@ opencore_amrnb_present
 opencore_amrnb_h_present
 ac_no_opencore_amrwb
 ac_no_opencore_amrnb
-libgnutls_present
-gnutls_h_present
 libcrypto_present
 libssl_present
 openssl_h_present
-ac_ssl_backend
 ac_ssl_has_aes_gcm
 ac_no_ssl
 ac_openh264_ldflags
@@ -700,7 +697,6 @@ ac_external_speex
 ac_shared_libraries
 ac_linux_poll
 ac_os_objs
-ac_target_arch
 EGREP
 GREP
 CPP
@@ -762,6 +758,7 @@ infodir
 docdir
 oldincludedir
 includedir
+runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -822,7 +819,6 @@ with_ipp
 with_ipp_samples
 with_ipp_arch
 with_ssl
-with_gnutls
 enable_ssl
 with_opencore_amrnb
 with_opencore_amr
@@ -887,6 +883,7 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
+runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1139,6 +1136,15 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
+  -runstatedir | --runstatedir | --runstatedi | --runstated \
+  | --runstate | --runstat | --runsta | --runst | --runs \
+  | --run | --ru | --r)
+    ac_prev=runstatedir ;;
+  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
+  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
+  | --run=* | --ru=* | --r=*)
+    runstatedir=$ac_optarg ;;
+
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1276,7 +1282,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir
+		libdir localedir mandir runstatedir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1429,6 +1435,7 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
+  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1547,11 +1554,7 @@ Optional Packages:
   --with-ipp-samples=DIR  Specify the Intel IPP samples location
   --with-ipp-arch=ARCH    Specify the Intel IPP ARCH suffix, e.g. "64" or
                           "em64t. Default is blank for IA32"
-  --with-ssl=DIR          Specify alternate SSL library prefix. This option
-                          will try to find OpenSSL first, then if not found,
-                          GnuTLS. To skip OpenSSL finding, use --with-gnutls
-                          option instead.
-  --with-gnutls=DIR       Specify alternate GnuTLS prefix
+  --with-ssl=DIR          Specify alternate libssl prefix
   --with-opencore-amrnb=DIR
                           This option is obsolete and replaced by
                           --with-opencore-amr=DIR
@@ -5061,12 +5064,10 @@ else
   CFLAGS="$CFLAGS -DPJ_IS_BIG_ENDIAN=0 -DPJ_IS_LITTLE_ENDIAN=1"
 fi
 
-
 case $target in
     *android*)
 	$as_echo "#define PJ_ANDROID 1" >>confdefs.h
 
-	ac_target_arch=$TARGET_ABI
 	;;
     *mingw* | *cygw* | *win32* | *w32* )
 	$as_echo "#define PJ_WIN32 1" >>confdefs.h
@@ -5079,7 +5080,6 @@ case $target in
     *darwin*)
 	$as_echo "#define PJ_DARWINOS 1" >>confdefs.h
 
-    	ac_target_arch=$ARCH_VAL
 	;;
     *linux*)
 	$as_echo "#define PJ_LINUX 1" >>confdefs.h
@@ -7859,23 +7859,12 @@ else
 fi
 
 
-
-# Check whether --with-gnutls was given.
-if test "${with_gnutls+set}" = set; then :
-  withval=$with_gnutls;
-else
-  with_gnutls=no
-
-fi
-
-
-if test "x$ac_cross_compile" != "x" -a "x$with_ssl" = "xno" -a "x$with_gnutls" = "xno"; then
+if test "x$ac_cross_compile" != "x" -a "x$with_ssl" = "xno"; then
     enable_ssl=no
 fi
 
 
 ac_ssl_has_aes_gcm=0
-
 
 # Check whether --enable-ssl was given.
 if test "${enable_ssl+set}" = set; then :
@@ -7888,6 +7877,8 @@ $as_echo "Checking if SSL support is disabled... yes" >&6; }
 
 else
 
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: checking for OpenSSL installations.." >&5
+$as_echo "checking for OpenSSL installations.." >&6; }
                 if test "x$with_ssl" != "xno" -a "x$with_ssl" != "x"; then
                     CFLAGS="$CFLAGS -I$with_ssl/include"
                     LDFLAGS="$LDFLAGS -L$with_ssl/lib"
@@ -7895,20 +7886,15 @@ else
 $as_echo "Using SSL prefix... $with_ssl" >&6; }
                 fi
 
-	        if test "x$with_gnutls" = "xno"; then
-
-		    { $as_echo "$as_me:${as_lineno-$LINENO}: result: checking for OpenSSL installations.." >&5
-$as_echo "checking for OpenSSL installations.." >&6; }
 
 
-
-		    ac_fn_c_check_header_mongrel "$LINENO" "openssl/ssl.h" "ac_cv_header_openssl_ssl_h" "$ac_includes_default"
+		ac_fn_c_check_header_mongrel "$LINENO" "openssl/ssl.h" "ac_cv_header_openssl_ssl_h" "$ac_includes_default"
 if test "x$ac_cv_header_openssl_ssl_h" = xyes; then :
   openssl_h_present=1
 fi
 
 
-		    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ERR_load_BIO_strings in -lcrypto" >&5
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for ERR_load_BIO_strings in -lcrypto" >&5
 $as_echo_n "checking for ERR_load_BIO_strings in -lcrypto... " >&6; }
 if ${ac_cv_lib_crypto_ERR_load_BIO_strings+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -7948,7 +7934,7 @@ if test "x$ac_cv_lib_crypto_ERR_load_BIO_strings" = xyes; then :
   libcrypto_present=1 && LIBS="-lcrypto $LIBS"
 fi
 
-		    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for SSL_CTX_new in -lssl" >&5
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SSL_CTX_new in -lssl" >&5
 $as_echo_n "checking for SSL_CTX_new in -lssl... " >&6; }
 if ${ac_cv_lib_ssl_SSL_CTX_new+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -7988,7 +7974,7 @@ if test "x$ac_cv_lib_ssl_SSL_CTX_new" = xyes; then :
   libssl_present=1 && LIBS="-lssl $LIBS"
 fi
 
-		    if test "x$openssl_h_present" = "x1" -a "x$libssl_present" = "x1" -a "x$libcrypto_present" = "x1"; then
+		if test "x$openssl_h_present" = "x1" -a "x$libssl_present" = "x1" -a "x$libcrypto_present" = "x1"; then
 	        	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: OpenSSL library found, SSL support enabled" >&5
 $as_echo "OpenSSL library found, SSL support enabled" >&6; }
 
@@ -8064,145 +8050,10 @@ $as_echo "OpenSSL AES GCM support not found, SRTP will only support AES CM crypt
 			#AC_DEFINE(PJSIP_HAS_TLS_TRANSPORT, 1)
 			$as_echo "#define PJ_HAS_SSL_SOCK 1" >>confdefs.h
 
-			$as_echo "#define PJ_SSL_SOCK_IMP PJ_SSL_SOCK_IMP_OPENSSL" >>confdefs.h
-
-			ac_ssl_backend="openssl"
-		    else
-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ** OpenSSL libraries not found **" >&5
-$as_echo "** OpenSSL libraries not found **" >&6; }
-		    fi
-
+		else
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ** OpenSSL libraries not found, disabling SSL support **" >&5
+$as_echo "** OpenSSL libraries not found, disabling SSL support **" >&6; }
 		fi
-
-    		if test "x$ac_ssl_backend" = "x"; then
-
-		    if test "x$with_gnutls" != "xno" -a "x$with_gnutls" != "x"; then
-        	        CFLAGS="$CFLAGS -I$with_gnutls/include"
-        	        LDFLAGS="$LDFLAGS -L$with_gnutls/lib"
-        	        { $as_echo "$as_me:${as_lineno-$LINENO}: result: Using GnuTLS prefix... $with_gnutls" >&5
-$as_echo "Using GnuTLS prefix... $with_gnutls" >&6; }
-    		    fi
-
-        	    for ac_prog in $host-pkg-config pkg-config "python pkgconfig.py"
-do
-  # Extract the first word of "$ac_prog", so it can be a program name with args.
-set dummy $ac_prog; ac_word=$2
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-$as_echo_n "checking for $ac_word... " >&6; }
-if ${ac_cv_prog_PKG_CONFIG+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  if test -n "$PKG_CONFIG"; then
-  ac_cv_prog_PKG_CONFIG="$PKG_CONFIG" # Let the user override the test.
-else
-as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  test -z "$as_dir" && as_dir=.
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-    ac_cv_prog_PKG_CONFIG="$ac_prog"
-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-fi
-fi
-PKG_CONFIG=$ac_cv_prog_PKG_CONFIG
-if test -n "$PKG_CONFIG"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PKG_CONFIG" >&5
-$as_echo "$PKG_CONFIG" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-
-
-  test -n "$PKG_CONFIG" && break
-done
-test -n "$PKG_CONFIG" || PKG_CONFIG="none"
-
-        	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: checking for GnuTLS installations.." >&5
-$as_echo "checking for GnuTLS installations.." >&6; }
-
-
-        	    ac_fn_c_check_header_mongrel "$LINENO" "gnutls/gnutls.h" "ac_cv_header_gnutls_gnutls_h" "$ac_includes_default"
-if test "x$ac_cv_header_gnutls_gnutls_h" = xyes; then :
-  gnutls_h_present=1
-fi
-
-
-
-        	    if test "$PKG_CONFIG" != "none"; then
-            	    	if $PKG_CONFIG --exists gnutls; then
-                	    LIBS="$LIBS `$PKG_CONFIG --libs gnutls`"
-                	    libgnutls_present=1
-            		else
-                	    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for gnutls_certificate_set_x509_system_trust in -lgnutls" >&5
-$as_echo_n "checking for gnutls_certificate_set_x509_system_trust in -lgnutls... " >&6; }
-if ${ac_cv_lib_gnutls_gnutls_certificate_set_x509_system_trust+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lgnutls  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char gnutls_certificate_set_x509_system_trust ();
-int
-main ()
-{
-return gnutls_certificate_set_x509_system_trust ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_gnutls_gnutls_certificate_set_x509_system_trust=yes
-else
-  ac_cv_lib_gnutls_gnutls_certificate_set_x509_system_trust=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gnutls_gnutls_certificate_set_x509_system_trust" >&5
-$as_echo "$ac_cv_lib_gnutls_gnutls_certificate_set_x509_system_trust" >&6; }
-if test "x$ac_cv_lib_gnutls_gnutls_certificate_set_x509_system_trust" = xyes; then :
-  libgnutls_present=1 &&
-                              LIBS="$LIBS -lgnutls"
-fi
-
-            		fi
-        	    else
-            		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: *** Warning: neither pkg-config nor python is available, disabling gnutls. ***" >&5
-$as_echo "*** Warning: neither pkg-config nor python is available, disabling gnutls. ***" >&6; }
-        	    fi
-
-        	    if test "x$gnutls_h_present" = "x1" -a "x$libgnutls_present" = "x1"; then
-           		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: GnuTLS library found, SSL support enabled" >&5
-$as_echo "GnuTLS library found, SSL support enabled" >&6; }
-			$as_echo "#define PJ_HAS_SSL_SOCK 1" >>confdefs.h
-
-			$as_echo "#define PJ_SSL_SOCK_IMP PJ_SSL_SOCK_IMP_GNUTLS" >>confdefs.h
-
-            		ac_ssl_backend="gnutls"
-        	    else
-            		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ** No GnuTLS libraries found, disabling SSL support **" >&5
-$as_echo "** No GnuTLS libraries found, disabling SSL support **" >&6; }
-        	    fi
-
-        	fi
 
 fi
 

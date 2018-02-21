@@ -974,21 +974,7 @@ static pj_bool_t is_transport_valid(pjsip_transport *tp, pjsip_tpmgr *tpmgr,
 				    const pjsip_transport_key *key,
 				    int key_len)
 {
-    transport *tp_iter;
-
-    if (pj_hash_get(tpmgr->table, key, key_len, NULL) == (void*)tp) {
-        return PJ_TRUE;
-    }
-
-    tp_iter = tpmgr->tp_list.next;
-    while (tp_iter != &tpmgr->tp_list) {
-        if (tp_iter->tp == tp) {
-            return PJ_TRUE;
-        }
-        tp_iter = tp_iter->next;
-    }
-
-    return PJ_FALSE;
+    return (pj_hash_get(tpmgr->table, key, key_len, NULL) == (void*)tp);
 }
 
 /*
@@ -1423,7 +1409,7 @@ static pj_status_t get_net_interface(pjsip_transport_type_e tp_type,
     pj_sockaddr itf_addr;
     pj_status_t status = -1;
 
-    af = (tp_type & PJSIP_TRANSPORT_IPV6)? pj_AF_INET6() : pj_AF_INET();
+    af = (tp_type & PJSIP_TRANSPORT_IPV6)? PJ_AF_INET6 : PJ_AF_INET;
 
     if (pjsip_cfg()->endpt.resolve_hostname_to_get_interface) {
 	status = pj_getipinterface(af, dst, &itf_addr, PJ_TRUE, NULL);

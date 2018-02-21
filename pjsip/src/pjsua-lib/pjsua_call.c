@@ -664,64 +664,6 @@ static void dlg_set_via(pjsip_dialog *dlg, pjsua_acc *acc)
     }
 }
 
-
-static pj_status_t dlg_set_target(pjsip_dialog *dlg, const pj_str_t *target)
-{
-    pjsip_uri *target_uri;
-    pj_str_t tmp;
-    pj_status_t status;
-
-    /* Parse target & verify */
-    pj_strdup_with_null(dlg->pool, &tmp, target);
-    target_uri = pjsip_parse_uri(dlg->pool, tmp.ptr, tmp.slen, 0);
-    if (!target_uri) {
-	return PJSIP_EINVALIDURI;
-    }
-    if (!PJSIP_URI_SCHEME_IS_SIP(target_uri) &&
-	!PJSIP_URI_SCHEME_IS_SIPS(target_uri))
-    {
-	return PJSIP_EINVALIDSCHEME;
-    }
-
-    /* Add the new target */
-    status = pjsip_target_set_add_uri(&dlg->target_set, dlg->pool,
-				      target_uri, 0);
-    if (status != PJ_SUCCESS)
-	return status;
-
-    /* Set it as current target */
-    status = pjsip_target_set_set_current(&dlg->target_set,
-			    pjsip_target_set_get_next(&dlg->target_set));
-    if (status != PJ_SUCCESS)
-	return status;
-
-    /* Update dialog target URI */
-    dlg->target = target_uri;
-
-    return PJ_SUCCESS;
-}
-
-
-/* Get account contact for call and update dialog transport */
-void call_update_contact(pjsua_call *call, pj_str_t **new_contact)
-{
-    pjsip_tpselector tp_sel;
-    pjsua_acc *acc = &pjsua_var.acc[call->acc_id];
-
-    if (acc->cfg.force_contact.slen)
-	*new_contact = &acc->cfg.force_contact;
-    else if (acc->contact.slen)
-	*new_contact = &acc->contact;
-
-    /* When contact is changed, the account transport may have been
-     * changed too, so let's update the dialog's transport too.
-     */
-    pjsua_init_tpselector(acc->cfg.transport_id, &tp_sel);
-    pjsip_dlg_set_transport(call->inv->dlg, &tp_sel);
-}
-
-
-
 /*
  * Make outgoing call to the specified URI using the specified account.
  */
@@ -2569,23 +2511,13 @@ PJ_DEF(pj_status_t) pjsua_call_set_hold2(pjsua_call_id call_id,
     if ((options & PJSUA_CALL_UPDATE_CONTACT) &&
 	pjsua_acc_is_valid(call->acc_id))
     {
-	call_update_contact(call, &new_contact);
+	new_contact = &pjsua_var.acc[call->acc_id].contact;
     }
 
     if ((options & PJSUA_CALL_UPDATE_VIA) &&
 	pjsua_acc_is_valid(call->acc_id))
     {
     	dlg_set_via(call->inv->dlg, &pjsua_var.acc[call->acc_id]);
-    }
-
-    if ((call->opt.flag & PJSUA_CALL_UPDATE_TARGET) &&
-	msg_data && msg_data->target_uri.slen)
-    {
-	status = dlg_set_target(dlg, &msg_data->target_uri);
-	if (status != PJ_SUCCESS) {
-	    pjsua_perror(THIS_FILE, "Unable to set new target", status);
-	    goto on_return;
-	}
     }
 
     /* Create re-INVITE with new offer */
@@ -2706,23 +2638,13 @@ PJ_DEF(pj_status_t) pjsua_call_reinvite2(pjsua_call_id call_id,
     if ((call->opt.flag & PJSUA_CALL_UPDATE_CONTACT) &&
 	    pjsua_acc_is_valid(call->acc_id))
     {
-	call_update_contact(call, &new_contact);
+	new_contact = &pjsua_var.acc[call->acc_id].contact;
     }
 
     if ((call->opt.flag & PJSUA_CALL_UPDATE_VIA) &&
 	pjsua_acc_is_valid(call->acc_id))
     {
     	dlg_set_via(call->inv->dlg, &pjsua_var.acc[call->acc_id]);
-    }
-
-    if ((call->opt.flag & PJSUA_CALL_UPDATE_TARGET) &&
-	msg_data && msg_data->target_uri.slen)
-    {
-	status = dlg_set_target(dlg, &msg_data->target_uri);
-	if (status != PJ_SUCCESS) {
-	    pjsua_perror(THIS_FILE, "Unable to set new target", status);
-	    goto on_return;
-	}
     }
 
     /* Create re-INVITE with new offer */
@@ -2834,23 +2756,13 @@ PJ_DEF(pj_status_t) pjsua_call_update2(pjsua_call_id call_id,
     if ((call->opt.flag & PJSUA_CALL_UPDATE_CONTACT) &&
 	    pjsua_acc_is_valid(call->acc_id))
     {
-	call_update_contact(call, &new_contact);
+	new_contact = &pjsua_var.acc[call->acc_id].contact;
     }
 
     if ((call->opt.flag & PJSUA_CALL_UPDATE_VIA) &&
 	pjsua_acc_is_valid(call->acc_id))
     {
 	dlg_set_via(call->inv->dlg, &pjsua_var.acc[call->acc_id]);
-    }
-
-    if ((call->opt.flag & PJSUA_CALL_UPDATE_TARGET) &&
-	msg_data && msg_data->target_uri.slen)
-    {
-	status = dlg_set_target(dlg, &msg_data->target_uri);
-	if (status != PJ_SUCCESS) {
-	    pjsua_perror(THIS_FILE, "Unable to set new target", status);
-	    goto on_return;
-	}
     }
 
     /* Create UPDATE with new offer */
@@ -3960,7 +3872,7 @@ pjsip_dialog* on_dlg_forked(pjsip_dialog *dlg, pjsip_rx_data *res)
 	pjsip_dlg_inc_lock(forked_dlg);
 
 	/* Disconnect the call */
-	status = pjsip_dlg_create_request(forked_dlg, pjsip_get_bye_method(),
+	status = pjsip_dlg_create_request(forked_dlg, &pjsip_bye_method,
 					  -1, &bye);
 	if (status == PJ_SUCCESS) {
 	    status = pjsip_dlg_send_request(forked_dlg, bye, -1, NULL);
@@ -4497,8 +4409,7 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	}
     }
     /*
-     * On incoming NOTIFY or an error response, notify application about call 
-     * transfer progress.
+     * On incoming NOTIFY, notify application about call transfer progress.
      */
     else if (pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_ACTIVE ||
 	     pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED)
@@ -4526,51 +4437,44 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	    /* Application is not interested with call progress status */
 	    goto on_return;
 	}
-	
+
+	/* This better be a NOTIFY request */
 	if (event->type == PJSIP_EVENT_TSX_STATE &&
 	    event->body.tsx_state.type == PJSIP_EVENT_RX_MSG)
 	{
 	    pjsip_rx_data *rdata;
 
 	    rdata = event->body.tsx_state.src.rdata;
+
+	    /* Check if there's body */
 	    msg = rdata->msg_info.msg;
-
-	    /* This better be a NOTIFY request */
-	    if (pjsip_method_cmp(&msg->line.req.method, 
-				 pjsip_get_notify_method()) == 0) 
-	    {
-		/* Check if there's body */
-		body = msg->body;
-		if (!body) {
-		    PJ_LOG(2, (THIS_FILE,
-			       "Warning: received NOTIFY without message "
-			       "body"));
-		    goto on_return;
-		}
-
-		/* Check for appropriate content */
-		if (pj_stricmp2(&body->content_type.type, "message") != 0 ||
-		    pj_stricmp2(&body->content_type.subtype, "sipfrag") != 0)
-		{
-		    PJ_LOG(2, (THIS_FILE,
-			       "Warning: received NOTIFY with non "
-			       "message/sipfrag content"));
-		    goto on_return;
-		}
-
-		/* Try to parse the content */
-		status = pjsip_parse_status_line((char*)body->data, body->len,
-						 &status_line);
-		if (status != PJ_SUCCESS) {
-		    PJ_LOG(2, (THIS_FILE,
-			       "Warning: received NOTIFY with invalid "
-			       "message/sipfrag content"));
-		    goto on_return;
-		}
-	    } else {
-		status_line.code = msg->line.status.code;
-		status_line.reason = msg->line.status.reason;
+	    body = msg->body;
+	    if (!body) {
+		PJ_LOG(2,(THIS_FILE,
+			  "Warning: received NOTIFY without message body"));
+		goto on_return;
 	    }
+
+	    /* Check for appropriate content */
+	    if (pj_stricmp2(&body->content_type.type, "message") != 0 ||
+		pj_stricmp2(&body->content_type.subtype, "sipfrag") != 0)
+	    {
+		PJ_LOG(2,(THIS_FILE,
+			  "Warning: received NOTIFY with non message/sipfrag "
+			  "content"));
+		goto on_return;
+	    }
+
+	    /* Try to parse the content */
+	    status = pjsip_parse_status_line((char*)body->data, body->len,
+					     &status_line);
+	    if (status != PJ_SUCCESS) {
+		PJ_LOG(2,(THIS_FILE,
+			  "Warning: received NOTIFY with invalid "
+			  "message/sipfrag content"));
+		goto on_return;
+	    }
+
 	} else {
 	    status_line.code = 500;
 	    status_line.reason = *pjsip_get_status_text(500);
@@ -4594,7 +4498,7 @@ static void xfer_client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	if (status_line.code/100 == 2 && !is_last) {
 	    pjsip_tx_data *tdata;
 
-	    status = pjsip_evsub_initiate(sub, pjsip_get_subscribe_method(),
+	    status = pjsip_evsub_initiate(sub, &pjsip_subscribe_method,
 					  0, &tdata);
 	    if (status == PJ_SUCCESS)
 		status = pjsip_evsub_send_request(sub, tdata);
@@ -4987,7 +4891,7 @@ static void pjsua_call_on_tsx_state_changed(pjsip_inv_session *inv,
 	    }
 	}
     } else if (tsx->role == PJSIP_ROLE_UAC &&
-               pjsip_method_cmp(&tsx->method, pjsip_get_invite_method())==0 &&
+               pjsip_method_cmp(&tsx->method, &pjsip_invite_method)==0 &&
                tsx->state >= PJSIP_TSX_STATE_COMPLETED &&
 	       e->body.tsx_state.prev_state < PJSIP_TSX_STATE_COMPLETED &&
                (!PJSIP_IS_STATUS_IN_CLASS(tsx->status_code, 300) &&

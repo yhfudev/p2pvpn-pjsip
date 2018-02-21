@@ -33,16 +33,6 @@ import java.lang.reflect.Method;
 
 class MyObserver implements MyAppObserver {
 	private static MyCall currentCall = null;
-	private static boolean del_call_scheduled = false;
-	
-	public void check_call_deletion()
-	{
-		if (del_call_scheduled && currentCall != null) {
-			currentCall.delete();
-			currentCall = null;
-			del_call_scheduled = false;
-		}
-	}
 	
 	@Override
 	public void notifyRegState(pjsip_status_code code, String reason, int expiration) {}
@@ -76,9 +66,7 @@ class MyObserver implements MyAppObserver {
 			ci = null;
 		}
 		if (ci.getState() == pjsip_inv_state.PJSIP_INV_STATE_DISCONNECTED) {
-			// Should not delete call instance here, so let's schedule it.
-			// The call will be deleted by our main worker thread.
-			del_call_scheduled = true;                 
+			currentCall = null;                        
 		} else if (ci.getState() == pjsip_inv_state.PJSIP_INV_STATE_CONFIRMED) {
 			if (ci.getSetting().getVideoCount() != 0) {
 				System.out.println("Changing video window using " + sample2.hwnd);
@@ -100,7 +88,7 @@ class MyObserver implements MyAppObserver {
 
 class MyThread extends Thread {
 	private static MyApp app = new MyApp();
-	private static MyObserver observer = new MyObserver();
+	private static MyAppObserver observer = new MyObserver();
 	private static MyAccount account = null;
 	private static AccountConfig accCfg = null;		     
 	
@@ -129,11 +117,7 @@ class MyThread extends Thread {
 		} catch (Exception e) {}
 
 		while (!Thread.currentThread().isInterrupted()) {
-			// Handle events
 			MyApp.ep.libHandleEvents(10);
-
-			// Check if any call instance need to be deleted
-			observer.check_call_deletion();
 			try {
 				Thread.currentThread().sleep(50);
 			} catch (InterruptedException ie) {

@@ -971,8 +971,6 @@ static pj_status_t get_last_token(pj_str_t *cmd, pj_str_t *str)
 	return PJ_GET_EXCEPTION();
     }
     PJ_END;
-    
-    pj_scan_fini(&scanner);
     return PJ_SUCCESS;
 }
 
@@ -1334,7 +1332,6 @@ static pj_status_t telnet_sess_send_with_format(cli_telnet_sess *sess,
     }
     PJ_END;
 
-    pj_scan_fini(&scanner);
     return PJ_SUCCESS;
 }
 

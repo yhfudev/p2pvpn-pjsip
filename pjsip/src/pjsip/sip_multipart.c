@@ -38,6 +38,8 @@
 #   define TRACE_(x)
 #endif
 
+extern pj_bool_t pjsip_use_compact_form;
+
 /* Type of "data" in multipart pjsip_msg_body */
 struct multipart_data
 {
@@ -103,7 +105,7 @@ static int multipart_print_body(struct pjsip_msg_body *msg_body,
 	    pj_str_t ctype_hdr = { "Content-Type: ", 14};
 	    const pjsip_media_type *media = &part->body->content_type;
 
-	    if (pjsip_cfg()->endpt.use_compact_form) {
+	    if (pjsip_use_compact_form) {
 		ctype_hdr.ptr = "c: ";
 		ctype_hdr.slen = 3;
 	    }
@@ -660,7 +662,7 @@ PJ_DEF(pjsip_msg_body*) pjsip_multipart_parse(pj_pool_t *pool,
 	     */
 	    if (*(end_body-1) == '\n')
 	        --end_body;
-	    if (end_body > start_body && *(end_body-1) == '\r')
+	    if (*(end_body-1) == '\r')
 	        --end_body;
         }
 

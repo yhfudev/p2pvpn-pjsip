@@ -694,9 +694,6 @@ static pj_status_t add_cmd_node(pj_cli_t *cli,
 
             PJ_USE_EXCEPTION;
 
-	    /* The buffer passed to the scanner is not NULL terminated,
-	     * but should be safe. See ticket #2063.
-	     */
             pj_scan_init(&scanner, attr->value.ptr, attr->value.slen,
                          PJ_SCAN_AUTOSKIP_WS, &on_syntax_error);
 
@@ -725,9 +722,7 @@ static pj_status_t add_cmd_node(pj_cli_t *cli,
                 return (PJ_GET_EXCEPTION());
             }
             PJ_END;
-
-            pj_scan_fini(&scanner);
-
+            
         } else if (!pj_stricmp2(&attr->name, "desc")) {
             pj_strdup(cli->pool, &cmd->desc, &attr->value);
         }
@@ -865,9 +860,7 @@ PJ_DEF(pj_status_t) pj_cli_sess_parse(pj_cli_sess *sess,
     str.slen = 0;
     pj_cli_exec_info_default(info);
 
-    /* Set the parse mode based on the latest char.
-     * And NULL terminate the buffer for the scanner.
-     */
+    /* Set the parse mode based on the latest char. */
     len = pj_ansi_strlen(cmdline);
     if (len > 0 && ((cmdline[len - 1] == '\r')||(cmdline[len - 1] == '\n'))) {
         cmdline[--len] = 0;
@@ -937,8 +930,6 @@ PJ_DEF(pj_status_t) pj_cli_sess_parse(pj_cli_sess *sess,
 	    return PJ_GET_EXCEPTION();
 	}
 	PJ_END;
-	
-	pj_scan_fini(&scanner);
     } 
     
     if ((parse_mode == PARSE_NEXT_AVAIL) || (parse_mode == PARSE_EXEC)) {

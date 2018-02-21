@@ -1045,12 +1045,6 @@ PJ_DEF(pj_status_t) pjsua_acc_modify( pjsua_acc_id acc_id,
     /* Transport */
     if (acc->cfg.transport_id != cfg->transport_id) {
 	acc->cfg.transport_id = cfg->transport_id;
-
-	if (acc->cfg.transport_id != PJSUA_INVALID_ID)
-	    acc->tp_type = pjsua_var.tpdata[acc->cfg.transport_id].type;
-	else
-	    acc->tp_type = PJSIP_TRANSPORT_UNSPECIFIED;
-
 	update_reg = PJ_TRUE;
 	unreg_first = PJ_TRUE;
     }
@@ -1999,12 +1993,6 @@ static void keep_alive_timer_cb(pj_timer_heap_t *th, pj_timer_entry *te)
     te->id = PJ_FALSE;
 
     acc = (pjsua_acc*) te->user_data;
-
-    /* Check if the account is still active. It might have just been deleted
-     * while the keep-alive timer was about to be called (race condition).
-     */
-    if (acc->ka_transport == NULL)
-	goto on_return;
 
     /* Select the transport to send the packet */
     pj_bzero(&tp_sel, sizeof(tp_sel));
@@ -3831,12 +3819,6 @@ void pjsua_acc_on_tp_state_changed(pjsip_transport *tp,
 	/* Skip if this account is not valid. */
 	if (!acc->valid)
 	    continue;
-
-	/* Reset Account's via transport and via address */
-	if (acc->via_tp == (void*)tp) {
-	    pj_bzero(&acc->via_addr, sizeof(acc->via_addr));
-	    acc->via_tp = NULL;
-	}
 
 	/* Release transport immediately if regc is using it
 	 * See https://trac.pjsip.org/repos/ticket/1481

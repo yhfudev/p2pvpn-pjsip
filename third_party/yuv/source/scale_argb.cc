@@ -336,14 +336,6 @@ static void ScaleARGBBilinearDown(int src_width,
     }
   }
 #endif
-#if defined(HAS_SCALEARGBFILTERCOLS_MSA)
-  if (TestCpuFlag(kCpuHasMSA)) {
-    ScaleARGBFilterCols = ScaleARGBFilterCols_Any_MSA;
-    if (IS_ALIGNED(dst_width, 8)) {
-      ScaleARGBFilterCols = ScaleARGBFilterCols_MSA;
-    }
-  }
-#endif
   // TODO(fbarchard): Consider not allocating row buffer for kFilterLinear.
   // Allocate a row of ARGB.
   {
@@ -450,14 +442,6 @@ static void ScaleARGBBilinearUp(int src_width,
     }
   }
 #endif
-#if defined(HAS_SCALEARGBFILTERCOLS_MSA)
-  if (filtering && TestCpuFlag(kCpuHasMSA)) {
-    ScaleARGBFilterCols = ScaleARGBFilterCols_Any_MSA;
-    if (IS_ALIGNED(dst_width, 8)) {
-      ScaleARGBFilterCols = ScaleARGBFilterCols_MSA;
-    }
-  }
-#endif
 #if defined(HAS_SCALEARGBCOLS_SSE2)
   if (!filtering && TestCpuFlag(kCpuHasSSE2) && src_width < 32768) {
     ScaleARGBFilterCols = ScaleARGBCols_SSE2;
@@ -468,14 +452,6 @@ static void ScaleARGBBilinearUp(int src_width,
     ScaleARGBFilterCols = ScaleARGBCols_Any_NEON;
     if (IS_ALIGNED(dst_width, 8)) {
       ScaleARGBFilterCols = ScaleARGBCols_NEON;
-    }
-  }
-#endif
-#if defined(HAS_SCALEARGBCOLS_MSA)
-  if (!filtering && TestCpuFlag(kCpuHasMSA)) {
-    ScaleARGBFilterCols = ScaleARGBCols_Any_MSA;
-    if (IS_ALIGNED(dst_width, 4)) {
-      ScaleARGBFilterCols = ScaleARGBCols_MSA;
     }
   }
 #endif
@@ -667,14 +643,6 @@ static void ScaleYUVToARGBBilinearUp(int src_width,
     }
   }
 #endif
-#if defined(HAS_SCALEARGBFILTERCOLS_MSA)
-  if (filtering && TestCpuFlag(kCpuHasMSA)) {
-    ScaleARGBFilterCols = ScaleARGBFilterCols_Any_MSA;
-    if (IS_ALIGNED(dst_width, 8)) {
-      ScaleARGBFilterCols = ScaleARGBFilterCols_MSA;
-    }
-  }
-#endif
 #if defined(HAS_SCALEARGBCOLS_SSE2)
   if (!filtering && TestCpuFlag(kCpuHasSSE2) && src_width < 32768) {
     ScaleARGBFilterCols = ScaleARGBCols_SSE2;
@@ -685,14 +653,6 @@ static void ScaleYUVToARGBBilinearUp(int src_width,
     ScaleARGBFilterCols = ScaleARGBCols_Any_NEON;
     if (IS_ALIGNED(dst_width, 8)) {
       ScaleARGBFilterCols = ScaleARGBCols_NEON;
-    }
-  }
-#endif
-#if defined(HAS_SCALEARGBCOLS_MSA)
-  if (!filtering && TestCpuFlag(kCpuHasMSA)) {
-    ScaleARGBFilterCols = ScaleARGBCols_Any_MSA;
-    if (IS_ALIGNED(dst_width, 4)) {
-      ScaleARGBFilterCols = ScaleARGBCols_MSA;
     }
   }
 #endif
@@ -816,14 +776,6 @@ static void ScaleARGBSimple(int src_width,
     ScaleARGBCols = ScaleARGBCols_Any_NEON;
     if (IS_ALIGNED(dst_width, 8)) {
       ScaleARGBCols = ScaleARGBCols_NEON;
-    }
-  }
-#endif
-#if defined(HAS_SCALEARGBCOLS_MSA)
-  if (TestCpuFlag(kCpuHasMSA)) {
-    ScaleARGBCols = ScaleARGBCols_Any_MSA;
-    if (IS_ALIGNED(dst_width, 4)) {
-      ScaleARGBCols = ScaleARGBCols_MSA;
     }
   }
 #endif

@@ -232,25 +232,13 @@ public class MainActivity extends Activity
 
 	} else if (m.what == MSG_TYPE.CALL_STATE) {
 
-	    MyCall call = (MyCall) m.obj;
-	    CallInfo ci;
-	    try {
-		ci = call.getInfo();
-	    } catch (Exception e) {
-		ci = null;
-	    }
+	    CallInfo ci = (CallInfo) m.obj;
 
-	    /* Forward the call info to CallActivity */
-	    if (ci != null && CallActivity.handler_ != null) {
+	    /* Forward the message to CallActivity */
+	    if (CallActivity.handler_ != null) {
 		Message m2 = Message.obtain(CallActivity.handler_,
 		    MSG_TYPE.CALL_STATE, ci);
 		m2.sendToTarget();
-	    }
-
-	    if (ci != null &&
-		ci.getState() == pjsip_inv_state.PJSIP_INV_STATE_DISCONNECTED)
-	    {
-		call.delete();
 	    }
 
 	} else if (m.what == MSG_TYPE.CALL_MEDIA_STATE) {
@@ -613,7 +601,7 @@ public class MainActivity extends Activity
 	} catch (Exception e) {
 	    ci = null;
 	}
-	Message m = Message.obtain(handler, MSG_TYPE.CALL_STATE, call);
+	Message m = Message.obtain(handler, MSG_TYPE.CALL_STATE, ci);
 	m.sendToTarget();
 
 	if (ci != null &&

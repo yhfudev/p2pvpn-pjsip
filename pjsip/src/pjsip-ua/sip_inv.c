@@ -4156,10 +4156,9 @@ static void inv_on_state_calling( pjsip_inv_session *inv, pjsip_event *e)
 		    status = pjsip_inv_send_msg(inv, cancel);
 	    }
 
-	    if (tsx->status_code != 100) {
+	    if (dlg->remote.info->tag.slen) {
 
-		if (dlg->remote.info->tag.slen)
-		    inv_set_state(inv, PJSIP_INV_STATE_EARLY, e);
+		inv_set_state(inv, PJSIP_INV_STATE_EARLY, e);
 
 		inv_check_sdp_in_incoming_msg(inv, tsx, 
 					      e->body.tsx_state.src.rdata);
@@ -4254,7 +4253,8 @@ static void inv_on_state_calling( pjsip_inv_session *inv, pjsip_event *e)
 	if ((tsx->status_code == PJSIP_SC_CALL_TSX_DOES_NOT_EXIST &&
 		tsx->method.id != PJSIP_CANCEL_METHOD) ||
 	    tsx->status_code == PJSIP_SC_REQUEST_TIMEOUT ||
-	    tsx->status_code == PJSIP_SC_TSX_TIMEOUT)
+	    tsx->status_code == PJSIP_SC_TSX_TIMEOUT ||
+	    tsx->status_code == PJSIP_SC_TSX_TRANSPORT_ERROR)
 	{
 	    inv_set_cause(inv, tsx->status_code, &tsx->status_text);
 	    inv_set_state(inv, PJSIP_INV_STATE_DISCONNECTED, e);
@@ -4663,7 +4663,7 @@ static void inv_on_state_connecting( pjsip_inv_session *inv, pjsip_event *e)
 
     } else if (tsx->role == PJSIP_ROLE_UAS &&
 	       tsx->state == PJSIP_TSX_STATE_TRYING &&
-	       pjsip_method_cmp(&tsx->method, pjsip_get_invite_method())==0)
+	       pjsip_method_cmp(&tsx->method, &pjsip_invite_method)==0)
     {
 	pjsip_rx_data *rdata = e->body.tsx_state.src.rdata;
 	pjsip_tx_data *tdata;

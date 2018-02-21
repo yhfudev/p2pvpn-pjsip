@@ -889,7 +889,7 @@ void print_call(const char *title,
     int len;
     pjsip_inv_session *inv = pjsua_var.calls[call_id].inv;
     pjsip_dialog *dlg;
-    char userinfo[PJSIP_MAX_URL_SIZE];
+    char userinfo[128];
 
     /* Dump invite sesion info. */
 
